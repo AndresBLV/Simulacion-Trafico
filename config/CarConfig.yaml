@@ -1,0 +1,27 @@
+behaviors:
+  CarAgent:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 20480
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+      beta: 1.0e-3  # Mayor exploración inicial
+      epsilon: 0.15  # Más bajo para mayor estabilidad
+      lambd: 0.92
+      num_epoch: 4
+    network_settings:
+      normalize: true
+      hidden_units: 256
+      num_layers: 3  # Capa adicional para física compleja
+      vis_encode_type: simple
+    reward_signals:
+      extrinsic:
+        gamma: 0.995
+        strength: 1.0
+    max_steps: 5000000
+    time_horizon: 512
+    summary_freq: 10000
+    threaded: true
+    keep_checkpoints: 5
+    checkpoint_interval: 50000
