@@ -10,6 +10,20 @@ public class GraphNode
     public string nodeType = "regular";
     public string originalName = "";
     public string roadName = "";
+
+     // Propiedad name que combina la información disponible
+    public string name 
+    { 
+        get 
+        { 
+            if (!string.IsNullOrEmpty(originalName)) 
+                return originalName;
+            else if (!string.IsNullOrEmpty(roadName)) 
+                return roadName;
+            else 
+                return $"Node_{id}";
+        } 
+    }
     
     // No serializar las edges para evitar circularidad
     [System.NonSerialized]

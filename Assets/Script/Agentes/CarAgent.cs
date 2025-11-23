@@ -5,6 +5,7 @@ using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
 using System.Linq;
+using System.IO;
 
 public class CarAgent : Agent
 {
@@ -26,6 +27,10 @@ public class CarAgent : Agent
     public float rainSpeedAdaptationRate = 0.1f;
     public float rainSteeringAdaptationRate = 0.05f;
     
+    [Header("Driver Data Configuration")]
+    public TextAsset driverDataFile;
+    public string initialLocation = "La Guaira"; // Configura la ubicación inicial aquí
+    
     private GraphNode currentNode;
     private GraphNode targetNode;
     private List<GraphNode> currentPath;
@@ -45,6 +50,38 @@ public class CarAgent : Agent
     private float currentSteeringResponse;
     private float weatherAdaptationLevel = 0f;
     
+    // Variables para datos del conductor
+    private DriverProfile currentDriverProfile;
+    private List<DriverProfile> driverProfiles;
+    private float baseMotorForce;
+    private float baseSteeringAngle;
+    
+    [System.Serializable]
+    public class DriverProfile
+    {
+        public string location;
+        public float speed;
+        public float initialSpeed;
+        public float maxSpeed;
+        public float averageSpeed;
+        public string preferredEntrance;
+        public string drivingStyle;
+        public string externalReaction;
+        public string deviation;
+        public float speedChangePercent;
+        public float estimatedDelay;
+        public string carType;
+        public string vehicleType;
+        public string leaveHomeTime;
+        public string arriveUnimetTime;
+        
+        // Factores de comportamiento calculados
+        public float speedMultiplier;
+        public float steeringMultiplier;
+        public float riskFactor;
+        public float patienceFactor;
+    }
+
     protected override void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -54,8 +91,202 @@ public class CarAgent : Agent
         currentMotorForce = motorForce;
         currentSteeringResponse = 1f;
         
+        baseMotorForce = motorForce;
+        baseSteeringAngle = steeringAngle;
+        
         if (roadGraphSystem == null)
             roadGraphSystem = FindFirstObjectByType<RoadGraphSystem>();
+            
+        // Cargar perfiles de conductores
+        LoadDriverProfiles();
+    }
+
+    private void LoadDriverProfiles()
+    {
+        driverProfiles = new List<DriverProfile>();
+        
+        if (driverDataFile == null)
+        {
+            Debug.LogError("No se ha asignado el archivo de datos de conductores!");
+            return;
+        }
+        
+        string[] lines = driverDataFile.text.Split('\n');
+        
+        foreach (string line in lines)
+        {
+            if (string.IsNullOrEmpty(line.Trim())) continue;
+            
+            DriverProfile profile = ParseDriverData(line);
+            if (profile != null)
+            {
+                driverProfiles.Add(profile);
+            }
+        }
+        
+        Debug.Log($"Se cargaron {driverProfiles.Count} perfiles de conductores");
+    }
+    
+    private DriverProfile ParseDriverData(string line)
+    {
+        try
+        {
+            DriverProfile profile = new DriverProfile();
+            
+            // Parsear los datos usando el formato del archivo
+            string[] parts = line.Split('|');
+            
+            foreach (string part in parts)
+            {
+                string[] keyValue = part.Split(':');
+                if (keyValue.Length < 2) continue;
+                
+                string key = keyValue[0].Trim();
+                string value = keyValue[1].Trim();
+                
+                switch (key)
+                {
+                    case "Ubicación":
+                        profile.location = value;
+                        break;
+                    case "Velocidad":
+                        float.TryParse(value, out profile.speed);
+                        break;
+                    case "Velocidad inicial":
+                        float.TryParse(value, out profile.initialSpeed);
+                        break;
+                    case "Velocidad máximo":
+                        float.TryParse(value, out profile.maxSpeed);
+                        break;
+                    case "Velocidad promedio":
+                        float.TryParse(value, out profile.averageSpeed);
+                        break;
+                    case "Entrada preferida":
+                        profile.preferredEntrance = value;
+                        break;
+                    case "Estilo de manejo":
+                        profile.drivingStyle = value;
+                        break;
+                    case "reacción a situación externa":
+                        profile.externalReaction = value;
+                        break;
+                    case "desvío":
+                        profile.deviation = value;
+                        break;
+                    case "cambio de velocidad (%)":
+                        float.TryParse(value, out profile.speedChangePercent);
+                        break;
+                    case "Demora estimada (min)":
+                        float.TryParse(value, out profile.estimatedDelay);
+                        break;
+                    case "Tipo de Carro":
+                        profile.carType = value;
+                        break;
+                    case "carro/moto/wawa/taxi":
+                        profile.vehicleType = value;
+                        break;
+                    case "Hora de salir de la casa":
+                        profile.leaveHomeTime = value;
+                        break;
+                    case "Hora de llegar a la Unimet":
+                        profile.arriveUnimetTime = value;
+                        break;
+                }
+            }
+            
+            // Calcular factores de comportamiento
+            CalculateBehaviorFactors(profile);
+            
+            return profile;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error parseando línea: {line}\nError: {e.Message}");
+            return null;
+        }
+    }
+    
+    private void CalculateBehaviorFactors(DriverProfile profile)
+    {
+        // Factor de velocidad basado en el estilo de manejo y velocidad promedio
+        if (profile.drivingStyle.Contains("Prudente"))
+        {
+            profile.speedMultiplier = 0.7f;
+            profile.riskFactor = 0.3f;
+            profile.patienceFactor = 0.8f;
+        }
+        else if (profile.drivingStyle.Contains("Lento"))
+        {
+            profile.speedMultiplier = 0.5f;
+            profile.riskFactor = 0.1f;
+            profile.patienceFactor = 0.9f;
+        }
+        else if (profile.drivingStyle.Contains("Agresivo"))
+        {
+            profile.speedMultiplier = 1.2f;
+            profile.riskFactor = 0.8f;
+            profile.patienceFactor = 0.3f;
+        }
+        else
+        {
+            profile.speedMultiplier = 1.0f;
+            profile.riskFactor = 0.5f;
+            profile.patienceFactor = 0.6f;
+        }
+        
+        // Ajustar según velocidad promedio
+        if (profile.averageSpeed > 0)
+        {
+            profile.speedMultiplier *= Mathf.Clamp(profile.averageSpeed / 30f, 0.5f, 1.5f);
+        }
+        
+        // Factor de steering basado en reacción externa
+        if (profile.externalReaction.Contains("Lenta"))
+        {
+            profile.steeringMultiplier = 0.6f;
+        }
+        else if (profile.externalReaction.Contains("Moderada"))
+        {
+            profile.steeringMultiplier = 0.8f;
+        }
+        else if (profile.externalReaction.Contains("Rápida"))
+        {
+            profile.steeringMultiplier = 1.2f;
+        }
+        else
+        {
+            profile.steeringMultiplier = 1.0f;
+        }
+    }
+    
+    private void SelectDriverProfileByLocation(string location)
+    {
+        // Buscar perfiles que coincidan con la ubicación
+        var matchingProfiles = driverProfiles.Where(p => p.location.Contains(location)).ToList();
+        
+        if (matchingProfiles.Count == 0)
+        {
+            Debug.LogWarning($"No se encontraron perfiles para ubicación: {location}. Usando perfil por defecto.");
+            currentDriverProfile = new DriverProfile()
+            {
+                speedMultiplier = 1.0f,
+                steeringMultiplier = 1.0f,
+                riskFactor = 0.5f,
+                patienceFactor = 0.5f
+            };
+            return;
+        }
+        
+        // Seleccionar un perfil aleatorio de los que coinciden
+        currentDriverProfile = matchingProfiles[Random.Range(0, matchingProfiles.Count)];
+        
+        // Aplicar ajustes basados en el perfil
+        motorForce = baseMotorForce * currentDriverProfile.speedMultiplier;
+        steeringAngle = baseSteeringAngle * currentDriverProfile.steeringMultiplier;
+        
+        Debug.Log($"Perfil seleccionado: {currentDriverProfile.location} - " +
+                 $"Estilo: {currentDriverProfile.drivingStyle} - " +
+                 $"Multiplicador velocidad: {currentDriverProfile.speedMultiplier}");
     }
 
     public override void OnEpisodeBegin()
@@ -63,6 +294,10 @@ public class CarAgent : Agent
         currentSteerInput = 0f;
         currentThrottleInput = 0f;
         ResetCar();
+        
+        // Seleccionar perfil basado en ubicación inicial
+        SelectDriverProfileByLocation(initialLocation);
+        
         InitializeGraphNavigation();
         
         // Reiniciar adaptación al clima
@@ -78,9 +313,42 @@ public class CarAgent : Agent
             roadGraphSystem.roadGraph.RebuildAllConnections();
             
             currentNode = roadGraphSystem.roadGraph.GetNearestNode(transform.position);
-            SetRandomTarget();
+            
+            // Usar la entrada preferida del perfil si está disponible
+            if (currentDriverProfile != null && !string.IsNullOrEmpty(currentDriverProfile.preferredEntrance))
+            {
+                SetTargetByPreferredEntrance();
+            }
+            else
+            {
+                SetRandomTarget();
+            }
+            
             CalculatePathToTarget();
         }
+    }
+    
+    private void SetTargetByPreferredEntrance()
+    {
+        if (roadGraphSystem.roadGraph.nodes.Count > 1)
+        {
+            roadGraphSystem.roadGraph.RebuildAllConnections();
+            
+            // Buscar nodos que coincidan con la entrada preferida
+            List<GraphNode> possibleTargets = roadGraphSystem.roadGraph.nodes
+                .Where(n => n.name.Contains(currentDriverProfile.preferredEntrance) && n != currentNode)
+                .ToList();
+                
+            if (possibleTargets.Count > 0)
+            {
+                targetNode = possibleTargets[Random.Range(0, possibleTargets.Count)];
+                Debug.Log($"Objetivo establecido por entrada preferida: {currentDriverProfile.preferredEntrance}");
+                return;
+            }
+        }
+        
+        // Fallback a objetivo aleatorio
+        SetRandomTarget();
     }
     
     private void SetRandomTarget()
@@ -163,7 +431,17 @@ public class CarAgent : Agent
                 if (currentPathIndex >= currentPath.Count && currentNode == targetNode)
                 {
                     AddReward(1f);
-                    SetRandomTarget();
+                    
+                    // Usar entrada preferida para nuevo objetivo si está disponible
+                    if (currentDriverProfile != null && !string.IsNullOrEmpty(currentDriverProfile.preferredEntrance))
+                    {
+                        SetTargetByPreferredEntrance();
+                    }
+                    else
+                    {
+                        SetRandomTarget();
+                    }
+                    
                     CalculatePathToTarget();
                 }
             }
@@ -344,6 +622,20 @@ public class CarAgent : Agent
             sensor.AddObservation(0f);
             sensor.AddObservation(0f);
         }
+        
+        // Observaciones del perfil del conductor
+        if (currentDriverProfile != null)
+        {
+            sensor.AddObservation(currentDriverProfile.speedMultiplier);
+            sensor.AddObservation(currentDriverProfile.riskFactor);
+            sensor.AddObservation(currentDriverProfile.patienceFactor);
+        }
+        else
+        {
+            sensor.AddObservation(1f); // Multiplicador velocidad por defecto
+            sensor.AddObservation(0.5f); // Factor de riesgo por defecto
+            sensor.AddObservation(0.5f); // Factor de paciencia por defecto
+        }
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -403,6 +695,28 @@ public class CarAgent : Agent
             if (Mathf.Abs(currentSteerInput) < 0.2f && forwardVelocity > 5f)
             {
                 AddReward(0.005f * WeatherManager.Instance.rainIntensity);
+            }
+        }
+        
+        // Recompensas basadas en el perfil del conductor
+        if (currentDriverProfile != null)
+        {
+            // Recompensar comportamiento consistente con el estilo de manejo
+            if (currentDriverProfile.drivingStyle.Contains("Prudente") || currentDriverProfile.drivingStyle.Contains("Lento"))
+            {
+                // Recompensar velocidades moderadas y steering suave
+                if (forwardVelocity < 15f && Mathf.Abs(currentSteerInput) < 0.3f)
+                {
+                    AddReward(0.002f * currentDriverProfile.patienceFactor);
+                }
+            }
+            else if (currentDriverProfile.drivingStyle.Contains("Agresivo"))
+            {
+                // Recompensar progresión más rápida (pero con cuidado)
+                if (forwardVelocity > 20f)
+                {
+                    AddReward(0.001f * currentDriverProfile.riskFactor);
+                }
             }
         }
     }
@@ -525,5 +839,17 @@ public class CarAgent : Agent
                 Gizmos.DrawSphere(currentPath[currentPathIndex].position, 1f);
             }
         }
+    }
+    
+    // Método público para cambiar la ubicación inicial
+    public void SetInitialLocation(string newLocation)
+    {
+        initialLocation = newLocation;
+    }
+    
+    // Método para obtener el perfil actual
+    public DriverProfile GetCurrentDriverProfile()
+    {
+        return currentDriverProfile;
     }
 }
