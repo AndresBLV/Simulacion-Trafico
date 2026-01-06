@@ -9,6 +9,7 @@
 
     public class CarAgent : Agent
     {
+        private float lastDebugTime = 0f;
         [Header("Car Settings")]
         public float motorForce = 1500f;
         public float steeringAngle = 25f;
@@ -436,6 +437,16 @@
 
         private void UpdateGraphNavigation()
         {
+                // DEBUG: Verificar estado del grafo periódicamente
+                if (Time.time - lastDebugTime > 10f) // Cada 10 segundos
+                {
+                    if (roadGraphSystem != null)
+                    {
+                        roadGraphSystem.DebugGraphInfo(); // Llamar al método de debugging
+                    }
+                    lastDebugTime = Time.time;
+                }
+    
             if (Time.time - lastPathRecalculationTime > pathRecalculationInterval)
             {
                 roadGraphSystem.roadGraph.RebuildAllConnections();

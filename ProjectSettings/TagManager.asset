@@ -9,6 +9,7 @@ TagManager:
   - Obstacle
   - Checkpoint
   - FinishLine
+  - NPC
   layers:
   - Default
   - TransparentFX

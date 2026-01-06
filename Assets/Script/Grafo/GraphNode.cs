@@ -41,11 +41,24 @@ public class GraphNode
     public void RebuildConnections(RoadGraph graph)
     {
         edges.Clear();
+        
+        // Buscar aristas donde este nodo sea el inicio
         foreach (var edge in graph.edges)
         {
+            // Asegurarse de reconstruir la conexión primero
+            edge.RebuildConnections(graph);
+            
             if (edge.startNodeId == this.id)
             {
-                edges.Add(edge);
+                // Verificar que endNode existe antes de agregar
+                if (edge.endNode != null)
+                {
+                    edges.Add(edge);
+                }
+                else
+                {
+                    Debug.LogWarning($"Nodo {id}: Arista con endNodeId={edge.endNodeId} tiene endNode null. Se omite.");
+                }
             }
         }
     }
