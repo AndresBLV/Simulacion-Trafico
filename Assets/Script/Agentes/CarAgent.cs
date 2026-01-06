@@ -805,7 +805,7 @@
 
                 // Si también está vacío, usa fallback
                 if (!string.IsNullOrEmpty(zone))
-                    spawn = spawnManager.GetSpawnPointForZone(zone);
+                    spawn = spawnManager.GetSpawnPointForLocation(zone);
             }
 
             // Reposicionar coche
