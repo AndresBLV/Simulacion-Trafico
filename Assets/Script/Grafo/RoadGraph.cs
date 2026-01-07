@@ -8,6 +8,7 @@ public class RoadGraph
     public List<GraphNode> nodes = new List<GraphNode>();
     public List<GraphEdge> edges = new List<GraphEdge>();
     
+    
     public GraphNode AddNode(Vector3 position, string originalName = "", string roadName = "")
     {
         int newId = nodes.Count > 0 ? nodes.Max(n => n.id) + 1 : 0;
@@ -191,5 +192,77 @@ public class RoadGraph
             Debug.Log($"Removidas {removedEdges} aristas inválidas");
             RebuildAllConnections();
         }
+    }
+
+        public List<GraphNode> FindNodesByName(string name, bool exactMatch = false)
+    {
+        string searchName = name.ToLower();
+        var results = new List<GraphNode>();
+        
+        foreach (var node in nodes)
+        {
+            bool found = false;
+            
+            // 1. Buscar en searchName (incluye specialName)
+            string nodeSearchName = node.searchName.ToLower();
+            if (exactMatch)
+            {
+                if (nodeSearchName == searchName)
+                    found = true;
+            }
+            else
+            {
+                if (nodeSearchName.Contains(searchName))
+                    found = true;
+            }
+            
+            // 2. Buscar en originalName (por si acaso)
+            if (!found && !string.IsNullOrEmpty(node.originalName))
+            {
+                string originalLower = node.originalName.ToLower();
+                if (exactMatch)
+                {
+                    if (originalLower == searchName)
+                        found = true;
+                }
+                else
+                {
+                    if (originalLower.Contains(searchName))
+                        found = true;
+                }
+            }
+            
+            if (found)
+                results.Add(node);
+        }
+        
+        return results;
+    }
+    
+    // Método para encontrar nodos especiales específicos
+    public List<GraphNode> FindSpecialNodes(string specialNameKeyword = "")
+    {
+        var specialNodes = new List<GraphNode>();
+        
+        foreach (var node in nodes)
+        {
+            if (node.HasSpecialName())
+            {
+                if (string.IsNullOrEmpty(specialNameKeyword))
+                {
+                    specialNodes.Add(node);
+                }
+                else
+                {
+                    string nodeSpecialName = node.specialName.ToLower();
+                    if (nodeSpecialName.Contains(specialNameKeyword.ToLower()))
+                    {
+                        specialNodes.Add(node);
+                    }
+                }
+            }
+        }
+        
+        return specialNodes;
     }
 }

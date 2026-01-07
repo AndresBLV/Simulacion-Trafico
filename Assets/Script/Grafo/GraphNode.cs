@@ -5,24 +5,51 @@ using UnityEngine;
 public class GraphNode
 {
     public int id;
+    
     public Vector3 position;
     public bool isIntersection = false;
     public string nodeType = "regular";
-    public string originalName = "";
+    public string originalName = "";  // Nombre original del GameObject
     public string roadName = "";
-
-     // Propiedad name que combina la información disponible
+    
+    // NUEVO: Nombre para display y búsqueda (puede ser diferente del original)
+    public string displayName = "";
+    
+    // NUEVO: Nombre especial (para las entradas importantes)
+    public string specialName = "";
+    
+    // Propiedad name que combina la información disponible
+    // PRIORIDAD: displayName -> originalName -> roadName -> Node_id
     public string name 
     { 
         get 
         { 
+            if (!string.IsNullOrEmpty(displayName)) 
+                return displayName;
             if (!string.IsNullOrEmpty(originalName)) 
                 return originalName;
-            else if (!string.IsNullOrEmpty(roadName)) 
+            if (!string.IsNullOrEmpty(roadName)) 
                 return roadName;
-            else 
-                return $"Node_{id}";
+            return $"Node_{id}";
         } 
+    }
+    
+    // Propiedad para búsqueda (incluye todos los nombres posibles)
+    public string searchName
+    {
+        get
+        {
+            // Si tiene un nombre especial, usarlo primero
+            if (!string.IsNullOrEmpty(specialName))
+                return specialName;
+            return name;
+        }
+    }
+    
+    // Verificar si tiene nombre especial
+    public bool HasSpecialName()
+    {
+        return !string.IsNullOrEmpty(specialName);
     }
     
     // No serializar las edges para evitar circularidad
@@ -35,6 +62,18 @@ public class GraphNode
         this.position = position;
         this.originalName = originalName;
         this.roadName = roadName;
+        this.displayName = originalName; // Por defecto, displayName = originalName
+        this.specialName = ""; // Inicialmente vacío
+    }
+    
+    // Método para establecer un nombre especial
+    public void SetSpecialName(string specialName)
+    {
+        if (!string.IsNullOrEmpty(specialName))
+        {
+            this.specialName = specialName;
+            this.displayName = specialName; // También actualizar displayName
+        }
     }
     
     // Método para reconstruir conexiones después de la deserialización
