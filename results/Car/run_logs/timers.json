@@ -2,7 +2,7 @@
     "name": "root",
     "metadata": {
         "timer_format_version": "0.1.0",
-        "start_time_seconds": "1767821860",
+        "start_time_seconds": "1768273354",
         "python_version": "3.10.12 | packaged by Anaconda, Inc. | (main, Jul  5 2023, 19:01:18) [MSC v.1916 64 bit (AMD64)]",
         "command_line_arguments": "C:\\Users\\andre\\anaconda3\\envs\\mlagents\\Scripts\\mlagents-learn config/CarConfig.yaml --run-id=Car --force --no-graphics",
         "mlagents_version": "1.1.0",
@@ -10,46 +10,46 @@
         "communication_protocol_version": "1.5.0",
         "pytorch_version": "2.2.2+cpu",
         "numpy_version": "1.23.5",
-        "end_time_seconds": "1767822004"
+        "end_time_seconds": "1768273495"
     },
-    "total": 143.59081939999305,
+    "total": 141.04287329991348,
     "count": 1,
-    "self": 0.009977499983506277,
+    "self": 0.012329999823123217,
     "children": {
         "run_training.setup": {
-            "total": 0.1030530000134604,
+            "total": 0.12733030004892498,
             "count": 1,
-            "self": 0.1030530000134604
+            "self": 0.12733030004892498
         },
         "TrainerController.start_learning": {
-            "total": 143.47778889999609,
+            "total": 140.90321300004143,
             "count": 1,
-            "self": 0.00016400001186411828,
+            "self": 0.0001808000961318612,
             "children": {
                 "TrainerController._reset_env": {
-                    "total": 20.40843500000483,
+                    "total": 16.018867899896577,
                     "count": 1,
-                    "self": 20.40843500000483
+                    "self": 16.018867899896577
                 },
                 "TrainerController.advance": {
-                    "total": 122.85381609998876,
+                    "total": 124.6081727000419,
                     "count": 1,
-                    "self": 2.339998900424689e-05,
+                    "self": 2.2600055672228336e-05,
                     "children": {
                         "env_step": {
-                            "total": 122.85379269999976,
+                            "total": 124.60815009998623,
                             "count": 1,
-                            "self": 122.85138350000489,
+                            "self": 124.53115439997055,
                             "children": {
                                 "SubprocessEnvManager._take_step": {
-                                    "total": 0.002409199994872324,
+                                    "total": 0.07699570001568645,
                                     "count": 1,
-                                    "self": 0.0001016999885905534,
+                                    "self": 0.00011220003943890333,
                                     "children": {
                                         "TorchPolicy.evaluate": {
-                                            "total": 0.0023075000062817708,
+                                            "total": 0.07688349997624755,
                                             "count": 1,
-                                            "self": 0.0023075000062817708
+                                            "self": 0.07688349997624755
                                         }
                                     }
                                 }
@@ -58,14 +58,14 @@
                     }
                 },
                 "TrainerController._save_models": {
-                    "total": 0.21537379999062978,
+                    "total": 0.27599160000681877,
                     "count": 1,
-                    "self": 0.09144929998728912,
+                    "self": 0.05677200003992766,
                     "children": {
                         "RLTrainer._checkpoint": {
-                            "total": 0.12392450000334065,
+                            "total": 0.2192195999668911,
                             "count": 1,
-                            "self": 0.12392450000334065
+                            "self": 0.2192195999668911
                         }
                     }
                 }

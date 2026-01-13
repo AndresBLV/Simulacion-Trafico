@@ -5,11 +5,9 @@ using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
 using System.Linq;
-using System.IO;
 
 public class CarAgent : Agent
 {
-    private float lastDebugTime = 0f;
     [Header("Car Settings")]
     public float motorForce = 1500f;
     public float steeringAngle = 25f;
@@ -18,14 +16,6 @@ public class CarAgent : Agent
     public LayerMask roadLayer;
     public int rayCount = 5;
     public float raySpreadAngle = 45f;
-
-    [Header("Spawn Manager")]
-    public SpawnManager spawnManager;
-    
-    [Header("Graph Navigation")]
-    public RoadGraphSystem roadGraphSystem;
-    public float pathRecalculationInterval = 5f;
-    public float nodeReachedDistance = 3f;
     
     [Header("Weather Adaptation")]
     public float rainSpeedAdaptationRate = 0.1f;
@@ -34,13 +24,6 @@ public class CarAgent : Agent
     [Header("Driver Data Configuration")]
     public TextAsset driverDataFile;
     public string initialLocation = "La Guaira";
-    
-    private GraphNode currentNode;
-    private GraphNode targetNode;
-    private List<GraphNode> currentPath;
-    private int currentPathIndex = 0;
-    public GraphEdge currentEdge;
-    private float lastPathRecalculationTime;
     
     private Rigidbody rb;
     private WheelCollider[] wheels;
@@ -117,9 +100,6 @@ public class CarAgent : Agent
         baseMotorForce = motorForce;
         baseSteeringAngle = steeringAngle;
         
-        if (roadGraphSystem == null)
-            roadGraphSystem = FindFirstObjectByType<RoadGraphSystem>();
-            
         LoadDriverProfiles();
         
         Debug.Log($"CarAgent.Awake() - Completado. Ruedas encontradas: {wheels.Length}");
@@ -387,314 +367,17 @@ public class CarAgent : Agent
         Debug.Log("CarAgent.OnEpisodeBegin() - Paso 1: Seleccionando perfil del conductor");
         SelectDriverProfileByLocation(initialLocation);
 
-        // 2. Inicializar navegación si depende del perfil
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 2: Inicializando navegación gráfica");
-        InitializeGraphNavigation();
-
-        // 3. Ahora sí: respawn basado en la zona del perfil
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 3: Reiniciando coche");
+        // 2. Resetear el coche
+        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 2: Reiniciando coche");
         ResetCar();
 
-        // 4. Reset de otras variables
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 4: Reiniciando otras variables");
+        // 3. Reset de otras variables
+        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 3: Reiniciando otras variables");
         weatherAdaptationLevel = 0f;
         currentMotorForce = motorForce;
         currentSteeringResponse = 1f;
         
         Debug.Log("CarAgent.OnEpisodeBegin() - Episodio inicializado correctamente");
-    }
-
-    private void InitializeGraphNavigation()
-    {
-        Debug.Log("CarAgent.InitializeGraphNavigation() - Inicializando navegación");
-        
-        if (roadGraphSystem != null)
-        {
-            Debug.Log($"CarAgent.InitializeGraphNavigation() - RoadGraphSystem encontrado, nodos: {roadGraphSystem.roadGraph.nodes.Count}");
-            
-            if (roadGraphSystem.roadGraph.nodes.Count > 0)
-            {
-                roadGraphSystem.roadGraph.RebuildAllConnections();
-                currentNode = roadGraphSystem.roadGraph.GetNearestNode(transform.position);
-                Debug.Log($"CarAgent.InitializeGraphNavigation() - Nodo actual: {currentNode?.name}");
-
-                if (currentDriverProfile != null && !string.IsNullOrEmpty(currentDriverProfile.preferredEntrance))
-                {
-                    Debug.Log($"CarAgent.InitializeGraphNavigation() - Configurando entrada preferida: {currentDriverProfile.preferredEntrance}");
-                    SetTargetByPreferredEntrance();
-                }
-                else
-                {
-                    Debug.Log("CarAgent.InitializeGraphNavigation() - Configurando objetivo aleatorio");
-                    SetRandomTarget();
-                }
-                
-                CalculatePathToTarget();
-            }
-            else
-            {
-                Debug.LogError("CarAgent.InitializeGraphNavigation() - RoadGraphSystem no tiene nodos!");
-            }
-        }
-        else
-        {
-            Debug.LogError("CarAgent.InitializeGraphNavigation() - RoadGraphSystem no asignado!");
-        }
-    }
-
-    private void SetTargetByPreferredEntrance()
-    {
-        Debug.Log($"CarAgent.SetTargetByPreferredEntrance() - Buscando entrada: {currentDriverProfile.preferredEntrance}");
-        
-        if (roadGraphSystem.roadGraph.nodes.Count > 1)
-        {
-            // Usar el nuevo método de búsqueda que incluye nombres especiales
-            var possibleTargets = roadGraphSystem.roadGraph.FindNodesByName(
-                currentDriverProfile.preferredEntrance, 
-                exactMatch: false  // Buscar con "contiene" no exacto
-            )
-            .Where(n => n != currentNode)
-            .ToList();
-            
-            Debug.Log($"CarAgent.SetTargetByPreferredEntrance() - Objetivos posibles: {possibleTargets.Count}");
-            
-            if (possibleTargets.Count > 0)
-            {
-                targetNode = possibleTargets[Random.Range(0, possibleTargets.Count)];
-                Debug.Log($"CarAgent.SetTargetByPreferredEntrance() - Objetivo establecido: {targetNode.searchName} " +
-                        $"(ID: {targetNode.id}, Original: {targetNode.originalName})");
-                return;
-            }
-            else
-            {
-                Debug.LogWarning($"CarAgent.SetTargetByPreferredEntrance() - No se encontró '{currentDriverProfile.preferredEntrance}'. " +
-                            "Buscando nodos especiales...");
-                
-                // Intentar buscar nodos especiales como fallback
-                var specialNodes = roadGraphSystem.roadGraph.FindSpecialNodes();
-                if (specialNodes.Count > 0)
-                {
-                    targetNode = specialNodes[Random.Range(0, specialNodes.Count)];
-                    Debug.Log($"CarAgent.SetTargetByPreferredEntrance() - Usando nodo especial: {targetNode.searchName}");
-                    return;
-                }
-            }
-        }
-
-        Debug.Log("CarAgent.SetTargetByPreferredEntrance() - No se encontró entrada preferida, usando objetivo aleatorio");
-        SetRandomTarget();
-    }
-
-    private void SetRandomTarget()
-    {
-        Debug.Log("CarAgent.SetRandomTarget() - Estableciendo objetivo aleatorio");
-        
-        if (roadGraphSystem.roadGraph.nodes.Count > 1)
-        {
-            var possibleTargets = roadGraphSystem.roadGraph.nodes
-                .Where(n => !n.isIntersection && n != currentNode)
-                .ToList();
-                
-            if (possibleTargets.Count > 0)
-            {
-                targetNode = possibleTargets[Random.Range(0, possibleTargets.Count)];
-                Debug.Log($"CarAgent.SetRandomTarget() - Objetivo aleatorio (no intersección): {targetNode.name}");
-                return;
-            }
-
-            do
-            {
-                targetNode = roadGraphSystem.roadGraph.nodes[Random.Range(0, roadGraphSystem.roadGraph.nodes.Count)];
-            }
-            while (targetNode == currentNode);
-            
-            Debug.Log($"CarAgent.SetRandomTarget() - Objetivo aleatorio: {targetNode.name}");
-        }
-        else
-        {
-            Debug.LogError("CarAgent.SetRandomTarget() - No hay suficientes nodos para establecer objetivo!");
-        }
-    }
-
-    private void CalculatePathToTarget()
-    {
-        Debug.Log($"CarAgent.CalculatePathToTarget() - Calculando ruta de {currentNode?.name} a {targetNode?.name}");
-        
-        if (currentNode != null && targetNode != null)
-        {
-            roadGraphSystem.roadGraph.RebuildAllConnections();
-            currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
-            currentPathIndex = 0;
-            lastPathRecalculationTime = Time.time;
-
-            if (currentPath != null)
-            {
-                Debug.Log($"CarAgent.CalculatePathToTarget() - Ruta encontrada con {currentPath.Count} nodos");
-            }
-            else
-            {
-                Debug.LogWarning("CarAgent.CalculatePathToTarget() - No se encontró ruta, estableciendo nuevo objetivo aleatorio");
-                SetRandomTarget();
-                CalculatePathToTarget();
-            }
-        }
-        else
-        {
-            Debug.LogError($"CarAgent.CalculatePathToTarget() - Nodo actual o objetivo nulo! " +
-                          $"CurrentNode={currentNode}, TargetNode={targetNode}");
-        }
-    }
-
-    private void UpdateGraphNavigation()
-    {
-        // DEBUG: Verificar estado del grafo periódicamente
-        if (Time.time - lastDebugTime > 10f) // Cada 10 segundos
-        {
-            Debug.Log("CarAgent.UpdateGraphNavigation() - Debug del grafo");
-            if (roadGraphSystem != null)
-            {
-                roadGraphSystem.DebugGraphInfo(); // Llamar al método de debugging
-            }
-            else
-            {
-                Debug.LogWarning("CarAgent.UpdateGraphNavigation() - RoadGraphSystem es nulo!");
-            }
-            lastDebugTime = Time.time;
-        }
-    
-        if (Time.time - lastPathRecalculationTime > pathRecalculationInterval)
-        {
-            Debug.Log("CarAgent.UpdateGraphNavigation() - Recalculando ruta por intervalo");
-            
-            if (roadGraphSystem == null)
-            {
-                Debug.LogError("CarAgent.UpdateGraphNavigation() - RoadGraphSystem es nulo!");
-                return;
-            }
-            
-            roadGraphSystem.roadGraph.RebuildAllConnections();
-            List<GraphNode> alt = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
-
-            if (alt != null && alt.Count > 0)
-            {
-                float currentCost = CalculatePathCost(currentPath);
-                float altCost = CalculatePathCost(alt);
-
-                Debug.Log($"CarAgent.UpdateGraphNavigation() - Comparando rutas: " +
-                         $"Coste actual={currentCost}, Coste alternativo={altCost}");
-
-                if (altCost < currentCost * 0.8f)
-                {
-                    Debug.Log("CarAgent.UpdateGraphNavigation() - Cambiando a ruta alternativa");
-                    currentPath = alt;
-                    currentPathIndex = 0;
-                }
-            }
-
-            lastPathRecalculationTime = Time.time;
-        }
-
-        if (currentPath != null && currentPathIndex < currentPath.Count)
-        {
-            Vector3 nextNodePos = currentPath[currentPathIndex].position;
-            float dist = Vector3.Distance(transform.position, nextNodePos);
-
-            Debug.Log($"CarAgent.UpdateGraphNavigation() - Distancia al siguiente nodo ({currentPathIndex}): {dist}");
-
-            if (dist < nodeReachedDistance)
-            {
-                Debug.Log($"CarAgent.UpdateGraphNavigation() - Nodo {currentPath[currentPathIndex].name} alcanzado");
-                currentNode = currentPath[currentPathIndex];
-                currentPathIndex++;
-                AddReward(0.1f);
-
-                if (currentPathIndex >= currentPath.Count && currentNode == targetNode)
-                {
-                    Debug.Log("CarAgent.UpdateGraphNavigation() - ¡Objetivo alcanzado!");
-                    AddReward(1f);
-
-                    if (!string.IsNullOrEmpty(currentDriverProfile.preferredEntrance))
-                    {
-                        Debug.Log("CarAgent.UpdateGraphNavigation() - Estableciendo nuevo objetivo por entrada preferida");
-                        SetTargetByPreferredEntrance();
-                    }
-                    else
-                    {
-                        Debug.Log("CarAgent.UpdateGraphNavigation() - Estableciendo nuevo objetivo aleatorio");
-                        SetRandomTarget();
-                    }
-
-                    CalculatePathToTarget();
-                }
-            }
-
-            UpdateCurrentEdge();
-        }
-        else
-        {
-            Debug.LogWarning($"CarAgent.UpdateGraphNavigation() - Sin ruta válida. " +
-                           $"CurrentPath={currentPath}, CurrentPathIndex={currentPathIndex}, PathCount={currentPath?.Count}");
-        }
-    }
-
-    private float CalculatePathCost(List<GraphNode> path)
-    {
-        if (path == null || path.Count < 2) 
-        {
-            Debug.LogWarning("CarAgent.CalculatePathCost() - Ruta inválida");
-            return Mathf.Infinity;
-        }
-
-        float cost = 0f;
-
-        for (int i = 0; i < path.Count - 1; i++)
-        {
-            GraphNode A = path[i];
-            GraphNode B = path[i + 1];
-
-            foreach (GraphEdge e in A.edges)
-            {
-                if (e.endNodeId == B.id)
-                {
-                    cost += e.TotalCost;
-                    break;
-                }
-            }
-        }
-
-        Debug.Log($"CarAgent.CalculatePathCost() - Coste calculado: {cost}");
-        return cost;
-    }
-
-    private void UpdateCurrentEdge()
-    {
-        if (currentPath != null && currentPathIndex > 0 && currentPathIndex < currentPath.Count)
-        {
-            GraphNode prev = currentPath[currentPathIndex - 1];
-            GraphNode next = currentPath[currentPathIndex];
-
-            Debug.Log($"CarAgent.UpdateCurrentEdge() - Buscando arista entre {prev.name} y {next.name}");
-
-            foreach (GraphEdge e in prev.edges)
-            {
-                if (e.endNodeId == next.id)
-                {
-                    if (e.endNode == null)
-                    {
-                        Debug.Log("CarAgent.UpdateCurrentEdge() - Reconstruyendo conexiones de arista");
-                        e.RebuildConnections(roadGraphSystem.roadGraph);
-                    }
-
-                    currentEdge = e;
-                    Debug.Log($"CarAgent.UpdateCurrentEdge() - Arista actual actualizada: {currentEdge.startNode.name} -> {currentEdge.endNode.name}");
-                    break;
-                }
-            }
-        }
-        else
-        {
-            Debug.LogWarning("CarAgent.UpdateCurrentEdge() - No se puede actualizar arista actual");
-        }
     }
 
     private void UpdateWeatherAdaptation()
@@ -813,36 +496,6 @@ public class CarAgent : Agent
             Debug.Log($"CarAgent.CollectObservations() - Rueda {wheel.name}: Grounded={wheel.isGrounded}");
         }
 
-        if (currentPath != null && currentPathIndex < currentPath.Count)
-        {
-            Vector3 nextDir = (currentPath[currentPathIndex].position - transform.position).normalized;
-            float dotToNext = Vector3.Dot(transform.forward, nextDir);
-            float distToNext = Vector3.Distance(transform.position, currentPath[currentPathIndex].position) / 50f;
-            
-            sensor.AddObservation(dotToNext);
-            sensor.AddObservation(distToNext);
-            
-            Debug.Log($"CarAgent.CollectObservations() - Navegación: DotToNext={dotToNext}, DistToNext={distToNext}");
-        }
-        else
-        {
-            sensor.AddObservation(0f);
-            sensor.AddObservation(0f);
-            Debug.LogWarning("CarAgent.CollectObservations() - Sin ruta válida para navegación");
-        }
-
-        if (currentEdge != null)
-        {
-            float trafficCost = currentEdge.trafficCost / 5f;
-            sensor.AddObservation(trafficCost);
-            Debug.Log($"CarAgent.CollectObservations() - Coste de tráfico: {trafficCost}");
-        }
-        else
-        {
-            sensor.AddObservation(0f);
-            Debug.Log("CarAgent.CollectObservations() - Sin arista actual");
-        }
-
         if (WeatherManager.Instance != null)
         {
             sensor.AddObservation(WeatherManager.Instance.isRaining ? 1f : 0f);
@@ -896,92 +549,8 @@ public class CarAgent : Agent
         
         Debug.Log($"CarAgent.OnActionReceived() - Acciones suavizadas: Steer={currentSteerInput}, Throttle={currentThrottleInput}");
 
-        //UpdateWeatherAdaptation();
-        
         ApplySteering(currentSteerInput);
         ApplyMotor(currentThrottleInput);
-        
-        //CalculateRewards();
-        //UpdateGraphNavigation();
-    }
-
-    private void CalculateRewards()
-    {
-        float forwardVelocity = Vector3.Dot(transform.forward, rb.linearVelocity);
-        float velocityReward = 0.001f + forwardVelocity * 0.01f;
-        AddReward(velocityReward);
-        
-        Debug.Log($"CarAgent.CalculateRewards() - Recompensa por velocidad: {velocityReward}, ForwardVelocity={forwardVelocity}");
-
-        float steerChangePenalty = -Mathf.Abs(currentSteerInput - previousSteerInput) * 0.005f;
-        AddReward(steerChangePenalty);
-        Debug.Log($"CarAgent.CalculateRewards() - Penalización por cambio de dirección: {steerChangePenalty}");
-        previousSteerInput = currentSteerInput;
-
-        if (!IsGrounded()) 
-        {
-            AddReward(-0.05f);
-            Debug.Log("CarAgent.CalculateRewards() - Penalización por no estar en suelo: -0.05");
-        }
-        
-        if (IsTilted()) 
-        {
-            AddReward(-0.01f);
-            Debug.Log("CarAgent.CalculateRewards() - Penalización por inclinación: -0.01");
-        }
-
-        if (currentPath != null && currentPathIndex < currentPath.Count)
-        {
-            Vector3 toNode = (currentPath[currentPathIndex].position - transform.position).normalized;
-            float directionReward = Vector3.Dot(transform.forward, toNode) * 0.01f;
-            AddReward(directionReward);
-            Debug.Log($"CarAgent.CalculateRewards() - Recompensa por dirección: {directionReward}");
-        }
-
-        if (WeatherManager.Instance != null && WeatherManager.Instance.isRaining)
-        {
-            float lateral = Mathf.Abs(Vector3.Dot(transform.right, rb.linearVelocity));
-            Debug.Log($"CarAgent.CalculateRewards() - Velocidad lateral en lluvia: {lateral}");
-
-            if (lateral > 2f)
-            {
-                float lateralPenalty = -0.02f * lateral * WeatherManager.Instance.rainIntensity;
-                AddReward(lateralPenalty);
-                Debug.Log($"CarAgent.CalculateRewards() - Penalización por derrape en lluvia: {lateralPenalty}");
-            }
-
-            if (Mathf.Abs(currentSteerInput) < 0.2f && forwardVelocity > 5f)
-            {
-                float steadyReward = 0.005f * WeatherManager.Instance.rainIntensity;
-                AddReward(steadyReward);
-                Debug.Log($"CarAgent.CalculateRewards() - Recompensa por conducción estable en lluvia: {steadyReward}");
-            }
-        }
-
-        if (currentDriverProfile != null)
-        {
-            if (currentDriverProfile.drivingStyle.Contains("Prudente") ||
-                currentDriverProfile.drivingStyle.Contains("Lento"))
-            {
-                if (forwardVelocity < 15f && Mathf.Abs(currentSteerInput) < 0.3f)
-                {
-                    float patientReward = 0.002f * currentDriverProfile.patienceFactor;
-                    AddReward(patientReward);
-                    Debug.Log($"CarAgent.CalculateRewards() - Recompensa por conducción prudente: {patientReward}");
-                }
-            }
-            else if (currentDriverProfile.drivingStyle.Contains("Agresivo"))
-            {
-                if (forwardVelocity > 20f)
-                {
-                    float aggressiveReward = 0.001f * currentDriverProfile.riskFactor;
-                    AddReward(aggressiveReward);
-                    Debug.Log($"CarAgent.CalculateRewards() - Recompensa por conducción agresiva: {aggressiveReward}");
-                }
-            }
-        }
-        
-        Debug.Log($"CarAgent.CalculateRewards() - Recompensa acumulada actual: {GetCumulativeReward()}");
     }
 
     private void ApplySteering(float steerInput)
@@ -1084,29 +653,9 @@ public class CarAgent : Agent
     {
         Debug.Log("CarAgent.ResetCar() - Reiniciando coche");
         
-        Transform spawn = resetPosition; // fallback por si no hay SpawnManager
-
-        if (spawnManager != null && currentDriverProfile != null)
-        {
-            // Primero intenta usar la zona donde vive del TXT
-            string zone = currentDriverProfile.livingZone;
-
-            // Si no existe, usa ubicación
-            if (string.IsNullOrEmpty(zone))
-                zone = currentDriverProfile.location;
-
-            Debug.Log($"CarAgent.ResetCar() - Buscando punto de spawn para zona: {zone}");
-
-            // Si también está vacío, usa fallback
-            if (!string.IsNullOrEmpty(zone))
-                spawn = spawnManager.GetSpawnPointForLocation(zone);
-        }
-
-        Debug.Log($"CarAgent.ResetCar() - Spawn point seleccionado: {spawn?.name}");
-
-        // Reposicionar coche
-        transform.position = spawn.position;
-        transform.rotation = spawn.rotation;
+        // Reposicionar coche en la posición de reset
+        transform.position = resetPosition.position;
+        transform.rotation = resetPosition.rotation;
         Debug.Log($"CarAgent.ResetCar() - Posición reiniciada a: {transform.position}");
 
         // Reset de física
@@ -1143,20 +692,6 @@ public class CarAgent : Agent
                 adjDist *= WeatherManager.Instance.GetVisibilityFactor();
 
             Gizmos.DrawRay(transform.position, dir * adjDist);
-        }
-
-        if (currentPath != null && currentPath.Count > 0)
-        {
-            Gizmos.color = Color.magenta;
-
-            for (int i = currentPathIndex; i < currentPath.Count - 1; i++)
-            {
-                Gizmos.DrawLine(currentPath[i].position, currentPath[i + 1].position);
-                Gizmos.DrawSphere(currentPath[i].position, 0.7f);
-            }
-
-            if (currentPathIndex < currentPath.Count)
-                Gizmos.DrawSphere(currentPath[currentPathIndex].position, 1f);
         }
     }
 

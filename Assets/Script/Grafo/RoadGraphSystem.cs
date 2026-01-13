@@ -13,12 +13,88 @@ public class RoadGraphSystem : MonoBehaviour
     
     private List<GameObject> visualIndicators = new List<GameObject>();
     
-    // Definir nombres especiales para intersecciones específicas
-    Dictionary<string, string> specialIntersectionNames = new Dictionary<string, string>
+    // Diccionario extendido de nombres especiales para TODOS los nodos importantes
+    Dictionary<string, string> specialNodeNames = new Dictionary<string, string>
     {
+        // Intersecciones
         { "Inter22", "Acceso Universidad Metropolitana (Terrazas del Ávila)" },
-        { "Inter2", "Acceso Distribuidor Metropolitano (Autopista)" }
+        { "Inter3", "Acceso Distribuidor Metropolitano (Autopista)" },
+        
+        // Nodos de SPAWN específicos que necesita TrafficManager
+        // Nodos iniciales de Road1
+        { "Node1(Road1)", "Spawn_Road1_Inicio1" },
+        { "Node2(Road1)", "Spawn_Road1_Inicio2" },
+        { "Node3(Road1)", "Spawn_Road1_Inicio3" },
+        
+        // Nodos iniciales de Road5
+        { "Node1(Road5)", "Spawn_Road5_Inicio1" },
+        { "Node2(Road5)", "Spawn_Road5_Inicio2" },
+        { "Node3(Road5)", "Spawn_Road5_Inicio3" },
+        
+        // Nodo 22 de Road3
+        { "Node22(Road3)", "Spawn_Road3_Nodo22" },
+        
+        // Nodos DESTINO específicos que necesita TrafficManager
+        { "Node29(Road1)", "Destino_Road1_Nodo29" },
+        { "Node21(Road5)", "Destino_Road5_Nodo21" }
     };
+    
+    // Método público para obtener nodos por nombre especial
+    public List<GraphNode> GetNodesBySpecialName(string specialName)
+    {
+        List<GraphNode> foundNodes = new List<GraphNode>();
+        
+        foreach (var node in roadGraph.nodes)
+        {
+            if (node.specialName == specialName)
+            {
+                foundNodes.Add(node);
+            }
+        }
+        
+        return foundNodes;
+    }
+    
+    // Método para obtener todos los nodos de spawn
+    public List<GraphNode> GetAllSpawnNodes()
+    {
+        List<GraphNode> spawnNodes = new List<GraphNode>();
+        
+        foreach (var node in roadGraph.nodes)
+        {
+            if (!string.IsNullOrEmpty(node.specialName) && 
+                (node.specialName.StartsWith("Spawn_") || 
+                 node.specialName.StartsWith("Destino_")))
+            {
+                spawnNodes.Add(node);
+            }
+        }
+        
+        return spawnNodes;
+    }
+    
+    // Método para obtener nodos de spawn específicos
+    public List<GraphNode> GetSpawnNodesByType(string type)
+    {
+        List<GraphNode> spawnNodes = new List<GraphNode>();
+        
+        foreach (var node in roadGraph.nodes)
+        {
+            if (!string.IsNullOrEmpty(node.specialName))
+            {
+                if (type == "spawn" && node.specialName.StartsWith("Spawn_"))
+                {
+                    spawnNodes.Add(node);
+                }
+                else if (type == "destino" && node.specialName.StartsWith("Destino_"))
+                {
+                    spawnNodes.Add(node);
+                }
+            }
+        }
+        
+        return spawnNodes;
+    }
     
     void Awake()
     {
@@ -30,6 +106,10 @@ public class RoadGraphSystem : MonoBehaviour
             {
                 roadGraph.CleanInvalidEdges();
                 roadGraph.RebuildAllConnections();
+                
+                // Mostrar nodos especiales creados
+                ShowSpecialNodesInfo();
+                
                 Debug.Log($"Grafo inicializado: {roadGraph.nodes.Count} nodos, {roadGraph.edges.Count} aristas válidas");
             }
             else
@@ -134,28 +214,18 @@ public class RoadGraphSystem : MonoBehaviour
                         intersectionNode.isIntersection = true;
                         intersectionNode.nodeType = "intersection";
                         
-                        // VERIFICAR SI ES UNA INTERSECCIÓN ESPECIAL
-                        if (specialIntersectionNames.ContainsKey(intersection.name))
+                        // ASIGNAR NOMBRE ESPECIAL si está en el diccionario
+                        if (specialNodeNames.ContainsKey(intersection.name))
                         {
-                            string specialName = specialIntersectionNames[intersection.name];
-                            intersectionNode.SetSpecialName(specialName);
-                            Debug.Log($"¡NODO ESPECIAL CREADO! {intersection.name} -> {specialName}");
+                            intersectionNode.specialName = specialNodeNames[intersection.name];
+                            Debug.Log($"¡NODO ESPECIAL CREADO! {intersection.name} -> {intersectionNode.specialName}");
                         }
                         
                         intersectionNodes.Add(intersectionNode);
                         positionToNode[roundedPos] = intersectionNode;
                         
-                        // Crear indicador visual (usar prefab especial si tiene nombre especial)
-                        if (intersectionNode.HasSpecialName())
-                        {
-                            // Puedes usar un prefab diferente para nodos especiales si quieres
-                            CreateVisualIndicator(intersectionNode.position, intersectionIndicatorPrefab);
-                            Debug.Log($"Indicador especial creado para {intersectionNode.searchName}");
-                        }
-                        else
-                        {
-                            CreateVisualIndicator(intersectionNode.position, nodeIndicatorPrefab);
-                        }
+                        // Crear indicador visual
+                        CreateVisualIndicator(intersectionNode.position, intersectionIndicatorPrefab);
                         
                         Debug.Log($"Intersección creada: {intersection.name} en posición {intersection.position}");
                     }
@@ -265,6 +335,14 @@ public class RoadGraphSystem : MonoBehaviour
                 if (string.IsNullOrEmpty(graphNode.roadName))
                     graphNode.roadName = road.name;
                 
+                // IMPORTANTE: Asignar nombre especial si este nodo está en nuestro diccionario
+                string nodeFullName = $"{node.name}({road.name})";
+                if (specialNodeNames.ContainsKey(nodeFullName))
+                {
+                    graphNode.specialName = specialNodeNames[nodeFullName];
+                    Debug.Log($"¡NODO ESPECIAL ASIGNADO! {nodeFullName} -> {graphNode.specialName}");
+                }
+                
                 currentRoadNodes.Add(graphNode);
                 
                 // Crear indicador visual
@@ -350,6 +428,9 @@ public class RoadGraphSystem : MonoBehaviour
             }
         }
         
+        // Mostrar información de nodos especiales
+        ShowSpecialNodesInfo();
+        
         // ========== RESUMEN ==========
         Debug.Log("=== RESUMEN DE CONSTRUCCIÓN DEL GRAFO ===");
         Debug.Log($"Carreteras procesadas: {roads.Count}");
@@ -363,6 +444,47 @@ public class RoadGraphSystem : MonoBehaviour
         if (isolatedNodes > 0)
         {
             Debug.LogWarning($"Hay {isolatedNodes} nodos aislados. Considera verificar las distancias de conexión.");
+        }
+    }
+    
+    // Método para mostrar información de nodos especiales
+    void ShowSpecialNodesInfo()
+    {
+        int specialNodesCount = 0;
+        Debug.Log("=== NODOS ESPECIALES ENCONTRADOS ===");
+        
+        foreach (var node in roadGraph.nodes)
+        {
+            if (!string.IsNullOrEmpty(node.specialName))
+            {
+                specialNodesCount++;
+                Debug.Log($"{specialNodesCount}. {node.specialName} (Original: {node.originalName}, Road: {node.roadName})");
+            }
+        }
+        
+        if (specialNodesCount == 0)
+        {
+            Debug.LogWarning("No se encontraron nodos con nombres especiales.");
+        }
+        else
+        {
+            Debug.Log($"Total nodos especiales: {specialNodesCount}");
+        }
+        
+        // Mostrar separadamente nodos de spawn y destino
+        var spawnNodes = GetSpawnNodesByType("spawn");
+        var destinoNodes = GetSpawnNodesByType("destino");
+        
+        Debug.Log($"Nodos de SPAWN encontrados: {spawnNodes.Count}");
+        foreach (var node in spawnNodes)
+        {
+            Debug.Log($"  - {node.specialName} en {node.position}");
+        }
+        
+        Debug.Log($"Nodos de DESTINO encontrados: {destinoNodes.Count}");
+        foreach (var node in destinoNodes)
+        {
+            Debug.Log($"  - {node.specialName} en {node.position}");
         }
     }
     
@@ -422,45 +544,6 @@ public class RoadGraphSystem : MonoBehaviour
         visualIndicators.Clear();
     }
     
-    [ContextMenu("Buscar y Mostrar Road Architect")]
-    private void SearchAndShowRoadArchitect()
-    {
-        GameObject roadArchitect = FindRoadArchitectSystem();
-        if (roadArchitect != null)
-        {
-            Debug.Log($"=== INFORMACIÓN DE ROAD ARCHITECT ===");
-            Debug.Log($"Nombre: {roadArchitect.name}");
-            Debug.Log($"Ruta: {GetFullPath(roadArchitect.transform)}");
-            Debug.Log($"Hijos directos:");
-            
-            foreach (Transform child in roadArchitect.transform)
-            {
-                Debug.Log($"  - {child.name} ({child.childCount} hijos)");
-                
-                if (child.name.StartsWith("Road"))
-                {
-                    Transform spline = child.Find("Spline");
-                    if (spline != null)
-                    {
-                        Debug.Log($"    Spline encontrado con {spline.childCount} nodos:");
-                        foreach (Transform node in spline)
-                        {
-                            Debug.Log($"      * {node.name} en posición {node.position}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.Log($"    No tiene Spline");
-                    }
-                }
-            }
-        }
-        else
-        {
-            Debug.LogError("RoadArchitectSystem NO ENCONTRADO");
-        }
-    }
-    
     void OnDrawGizmos()
     {
         if (!visualizeGraph || roadGraph == null) return;
@@ -469,12 +552,40 @@ public class RoadGraphSystem : MonoBehaviour
         
         foreach (GraphNode node in roadGraph.nodes)
         {
-            Gizmos.color = node.isIntersection ? Color.red : Color.blue;
-            Gizmos.DrawSphere(node.position, node.isIntersection ? 0.7f : 0.5f);
-            
-            #if UNITY_EDITOR
-            UnityEditor.Handles.Label(node.position + Vector3.up, $"{node.originalName}\n({node.roadName})");
-            #endif
+            // Nodos con nombre especial en AMARILLO
+            if (!string.IsNullOrEmpty(node.specialName))
+            {
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawSphere(node.position, node.isIntersection ? 0.8f : 0.6f);
+                
+                #if UNITY_EDITOR
+                // Mostrar el nombre especial
+                UnityEditor.Handles.Label(node.position + Vector3.up * 1.5f, 
+                    $"<color=yellow>{node.specialName}</color>\n<color=white>{node.originalName}</color>");
+                #endif
+            }
+            // Intersecciones en ROJO
+            else if (node.isIntersection)
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawSphere(node.position, 0.7f);
+                
+                #if UNITY_EDITOR
+                UnityEditor.Handles.Label(node.position + Vector3.up, 
+                    $"<color=red>{node.originalName}</color>\n({node.roadName})");
+                #endif
+            }
+            // Nodos normales en AZUL
+            else
+            {
+                Gizmos.color = Color.blue;
+                Gizmos.DrawSphere(node.position, 0.5f);
+                
+                #if UNITY_EDITOR
+                UnityEditor.Handles.Label(node.position + Vector3.up, 
+                    $"{node.originalName}\n({node.roadName})");
+                #endif
+            }
         }
         
         Gizmos.color = Color.green;
@@ -526,5 +637,14 @@ public class RoadGraphSystem : MonoBehaviour
         }
         
         Debug.Log($"Nodos aislados: {isolatedNodes}");
+        
+        // Mostrar nodos especiales
+        ShowSpecialNodesInfo();
+    }
+    
+    [ContextMenu("Mostrar Nodos Especiales")]
+    public void ShowSpecialNodes()
+    {
+        ShowSpecialNodesInfo();
     }
 }
