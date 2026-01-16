@@ -2,72 +2,39 @@
     "name": "root",
     "metadata": {
         "timer_format_version": "0.1.0",
-        "start_time_seconds": "1768273354",
+        "start_time_seconds": "1768492528",
         "python_version": "3.10.12 | packaged by Anaconda, Inc. | (main, Jul  5 2023, 19:01:18) [MSC v.1916 64 bit (AMD64)]",
-        "command_line_arguments": "C:\\Users\\andre\\anaconda3\\envs\\mlagents\\Scripts\\mlagents-learn config/CarConfig.yaml --run-id=Car --force --no-graphics",
+        "command_line_arguments": "C:\\Users\\leand\\anaconda3\\envs\\mlagents\\Scripts\\mlagents-learn config/CarConfig.yaml --run-id=Car --force --no-graphics",
         "mlagents_version": "1.1.0",
         "mlagents_envs_version": "1.1.0",
         "communication_protocol_version": "1.5.0",
         "pytorch_version": "2.2.2+cpu",
         "numpy_version": "1.23.5",
-        "end_time_seconds": "1768273495"
+        "end_time_seconds": "1768492597"
     },
-    "total": 141.04287329991348,
+    "total": 68.77368989959359,
     "count": 1,
-    "self": 0.012329999823123217,
+    "self": 0.018806098960340023,
     "children": {
         "run_training.setup": {
-            "total": 0.12733030004892498,
+            "total": 0.23405580036342144,
             "count": 1,
-            "self": 0.12733030004892498
+            "self": 0.23405580036342144
         },
         "TrainerController.start_learning": {
-            "total": 140.90321300004143,
+            "total": 68.52082800026983,
             "count": 1,
-            "self": 0.0001808000961318612,
+            "self": 0.00018810108304023743,
             "children": {
                 "TrainerController._reset_env": {
-                    "total": 16.018867899896577,
+                    "total": 68.52060799952596,
                     "count": 1,
-                    "self": 16.018867899896577
-                },
-                "TrainerController.advance": {
-                    "total": 124.6081727000419,
-                    "count": 1,
-                    "self": 2.2600055672228336e-05,
-                    "children": {
-                        "env_step": {
-                            "total": 124.60815009998623,
-                            "count": 1,
-                            "self": 124.53115439997055,
-                            "children": {
-                                "SubprocessEnvManager._take_step": {
-                                    "total": 0.07699570001568645,
-                                    "count": 1,
-                                    "self": 0.00011220003943890333,
-                                    "children": {
-                                        "TorchPolicy.evaluate": {
-                                            "total": 0.07688349997624755,
-                                            "count": 1,
-                                            "self": 0.07688349997624755
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    "self": 68.52060799952596
                 },
                 "TrainerController._save_models": {
-                    "total": 0.27599160000681877,
+                    "total": 3.189966082572937e-05,
                     "count": 1,
-                    "self": 0.05677200003992766,
-                    "children": {
-                        "RLTrainer._checkpoint": {
-                            "total": 0.2192195999668911,
-                            "count": 1,
-                            "self": 0.2192195999668911
-                        }
-                    }
+                    "self": 3.189966082572937e-05
                 }
             }
         }

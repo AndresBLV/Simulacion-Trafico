@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "Iniciando entrenamiento ML-Agents..."
 
 # --- CONFIGURACION ---
-$PROJECT_PATH = "C:\Unity\Simulacion-Trafico"
+$PROJECT_PATH = "C:\Users\leand\OneDrive\Documents\GitHub\Simulacion-Trafico"
 $CONDA_ENV = "mlagents"
 $CONFIG_FILE = "config/CarConfig.yaml"
 $RUN_ID = "Car"
