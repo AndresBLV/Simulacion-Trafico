@@ -11,10 +11,10 @@ public class CarAgent : Agent
     public float motorForce = 1500f;
     public float steeringAngle = 25f;
     public Transform resetPosition;
-    public float raycastDistance = 5f;
     public LayerMask roadLayer;
-    public int rayCount = 5;
-    public float raySpreadAngle = 45f;
+    public LayerMask obstacleLayer; // Layer para obstáculos dinámicos
+    public int rayCount = 9;
+    public float raySpreadAngle = 120f;
 
     [Header("Weather Adaptation")]
     public float rainSpeedAdaptationRate = 0.1f;
@@ -27,17 +27,18 @@ public class CarAgent : Agent
     private Rigidbody rb;
     private WheelCollider[] wheels;
     private bool hasFinished;
+
     private float currentSteerInput;
     private float currentThrottleInput;
-
     private float currentMotorForce;
     private float currentSteeringResponse;
     private float weatherAdaptationLevel;
 
-    private DriverProfile currentDriverProfile;
-    private List<DriverProfile> driverProfiles;
     private float baseMotorForce;
     private float baseSteeringAngle;
+
+    private DriverProfile currentDriverProfile;
+    private List<DriverProfile> driverProfiles;
 
     [System.Serializable]
     public class DriverProfile
@@ -57,33 +58,25 @@ public class CarAgent : Agent
 
     protected override void Awake()
     {
-        Debug.Log("Awake CarAgent ejecutado");
-        
         rb = GetComponent<Rigidbody>();
-        if(rb == null) Debug.LogWarning("No hay Rigidbody asignado!");
-        
         wheels = GetComponentsInChildren<WheelCollider>();
-        Debug.Log($"Ruedas encontradas: {wheels.Length}");
-        
         rb.centerOfMass = new Vector3(0, -0.5f, 0);
-        
-        currentMotorForce = motorForce;
-        currentSteeringResponse = 1f;
+
         baseMotorForce = motorForce;
         baseSteeringAngle = steeringAngle;
+        currentMotorForce = baseMotorForce;
+        currentSteeringResponse = 1f;
+
+        LoadDriverProfiles();
+        SelectDriverProfileByLocation(initialLocation);
     }
 
     private void SnapCarAboveGround()
     {
         if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, 10f, roadLayer))
         {
-            // Altura deseada desde el suelo hasta el centro del carro
-            float heightAboveGround = 0.2f; 
-
-            Vector3 targetPos = hit.point + Vector3.up * heightAboveGround;
-            transform.position = targetPos;
-
-            // Opcional: alinear el carro con la normal del terreno
+            float heightAboveGround = 0.2f;
+            transform.position = hit.point + Vector3.up * heightAboveGround;
             transform.rotation = Quaternion.FromToRotation(transform.up, hit.normal) * transform.rotation;
         }
     }
@@ -91,40 +84,27 @@ public class CarAgent : Agent
     private void LoadDriverProfiles()
     {
         driverProfiles = new List<DriverProfile>();
-        if (driverDataFile == null)
-        {
-            Debug.LogError("Archivo de datos de conductores no asignado");
-            return;
-        }
+        if (driverDataFile == null) return;
 
         var lines = driverDataFile.text.Split('\n');
-        int loadedCount = 0;
-
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-
             var profile = ParseDriverData(line);
-            if (profile != null)
-            {
-                driverProfiles.Add(profile);
-                loadedCount++;
-            }
+            if (profile != null) driverProfiles.Add(profile);
         }
-
-        Debug.Log($"Se cargaron {loadedCount} perfiles de conductores");
     }
 
     private DriverProfile ParseDriverData(string line)
     {
-        if (string.IsNullOrWhiteSpace(line)) return null;
         var profile = new DriverProfile();
         foreach (var raw in line.Split('|'))
         {
             var kv = raw.Split(':');
             if (kv.Length < 2) continue;
-            var key = kv[0].Trim(); 
+            var key = kv[0].Trim();
             var value = kv[1].Trim();
+
             switch (key)
             {
                 case "Año": profile.year = value; break;
@@ -179,37 +159,28 @@ public class CarAgent : Agent
         steeringAngle = baseSteeringAngle * currentDriverProfile.steeringMultiplier;
     }
 
-public override void OnEpisodeBegin()
-{
-
-    currentSteerInput = 0f;
-    currentThrottleInput = 0f;
-
-    // Reset de carro y Rigidbody
-    ResetCar();
-
-    SnapCarAboveGround();
-
-    // Log WeatherManager
-    if (WeatherManager.Instance != null)
+    public override void OnEpisodeBegin()
     {
-        currentMotorForce = motorForce * WeatherManager.Instance.GetMotorForceMultiplier();
-        currentSteeringResponse = WeatherManager.Instance.GetSteeringMultiplier();
-    }
-    else
-    {
-        currentMotorForce = motorForce;
-        currentSteeringResponse = 1f;
-    }
+        currentSteerInput = 0f;
+        currentThrottleInput = 0f;
+        ResetCar();
+        SnapCarAboveGround();
 
-    // Impulso de prueba para debug
-    rb.AddForce(transform.forward * 5f, ForceMode.VelocityChange);
-}
+        if (WeatherManager.Instance != null)
+        {
+            currentMotorForce = motorForce * WeatherManager.Instance.GetMotorForceMultiplier();
+            currentSteeringResponse = WeatherManager.Instance.GetSteeringMultiplier();
+        }
+        else
+        {
+            currentMotorForce = motorForce;
+            currentSteeringResponse = 1f;
+        }
+    }
 
     private void UpdateWeatherAdaptation()
     {
         if (WeatherManager.Instance == null) return;
-
         bool raining = WeatherManager.Instance.isRaining;
         weatherAdaptationLevel = Mathf.Clamp01(weatherAdaptationLevel + Time.deltaTime * (raining ? rainSpeedAdaptationRate : -rainSpeedAdaptationRate));
 
@@ -220,7 +191,7 @@ public override void OnEpisodeBegin()
         currentSteeringResponse = Mathf.Lerp(1f, targetSteer, weatherAdaptationLevel);
 
         float friction = raining ? WeatherManager.Instance.GetFrictionFactor() : 1f;
-        foreach (var w in wheels) { SetWheelFriction(w, friction); }
+        foreach (var w in wheels) SetWheelFriction(w, friction);
 
         if (raining) AddReward(0.001f * weatherAdaptationLevel);
     }
@@ -238,19 +209,21 @@ public override void OnEpisodeBegin()
 
         sensor.AddObservation(velocity);
         sensor.AddObservation(forwardDot);
+        sensor.AddObservation(transform.up.y);
 
+        // Raycasts para pista y obstáculos
         float angleStep = rayCount > 1 ? raySpreadAngle / (rayCount - 1) : 0f;
-
         for (int i = 0; i < rayCount; i++)
         {
             float angle = rayCount == 1 ? 0f : (-raySpreadAngle / 2 + i * angleStep);
             Vector3 dir = Quaternion.Euler(0, angle, 0) * transform.forward;
-            float adjDist = raycastDistance * (WeatherManager.Instance?.GetVisibilityFactor() ?? 1f);
+            float adjDist = 5f * (WeatherManager.Instance?.GetVisibilityFactor() ?? 1f);
 
+            // Detecta suelo
             sensor.AddObservation(Physics.Raycast(transform.position, dir, out RaycastHit hit, adjDist, roadLayer) ? hit.distance / adjDist : 0f);
+            // Detecta obstáculos dinámicos
+            sensor.AddObservation(Physics.Raycast(transform.position, dir, out RaycastHit hitObs, adjDist, obstacleLayer) ? 1f - hitObs.distance / adjDist : 0f);
         }
-
-        sensor.AddObservation(transform.up.y);
 
         foreach (var wheel in wheels) sensor.AddObservation(wheel.isGrounded);
 
@@ -272,51 +245,52 @@ public override void OnEpisodeBegin()
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        currentSteerInput = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
+        float steer = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
+        float throttle = Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f);
 
-        currentThrottleInput = Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f);
-
-        ApplySteering(currentSteerInput);
-        ApplyMotor(currentThrottleInput);
-
-        Debug.Log($"RawActions -> Steer: {currentSteerInput:F2}, Throttle: {currentThrottleInput:F2}");
+        ApplySteering(steer);
+        ApplyMotor(throttle);
     }
 
     private void ApplySteering(float steerInput)
     {
+        currentSteerInput = Mathf.Lerp(currentSteerInput, steerInput, 0.2f);
         foreach (var wheel in wheels)
-        {
-            if (wheel.transform.localPosition.z > 0) // delanteras
-                wheel.steerAngle = steerInput * steeringAngle * currentSteeringResponse;
-        }
+            if (wheel.transform.localPosition.z > 0) wheel.steerAngle = currentSteerInput * steeringAngle * currentSteeringResponse;
     }
 
     private void ApplyMotor(float throttleInput)
-    {   
-        Debug.Log($"=== ApplyMotor === ThrottleInput={throttleInput}, currentMotorForce={currentMotorForce}");
-
+    {
+        currentThrottleInput = Mathf.Lerp(currentThrottleInput, throttleInput, 0.2f);
         foreach (var wheel in wheels)
-        {
-            if (wheel.transform.localPosition.z < 0)
-            {
-                float torque = throttleInput * currentMotorForce;
-                wheel.motorTorque = torque;
-                Debug.Log($"Wheel {wheel.name}: motorTorque={torque}");
-            }
-        }     
-        foreach (var wheel in wheels) { Debug.Log($"Wheel {wheel.name}: motorTorque={wheel.motorTorque}, steerAngle={wheel.steerAngle}, WheelGrounded {wheel.isGrounded}"); } 
+            if (wheel.transform.localPosition.z < 0) wheel.motorTorque = currentThrottleInput * currentMotorForce;
     }
 
     private bool IsGrounded() => wheels.All(w => w.isGrounded);
     private bool IsTilted() => Vector3.Angle(transform.up, Vector3.up) > 45f;
 
+    private void RewardDriving()
+    {
+        // Avanzar hacia adelante
+        float forwardDot = Vector3.Dot(transform.forward, Vector3.forward);
+        AddReward(0.01f * forwardDot);
+
+        // Mantener centrado (aproximado usando posición lateral)
+        float lateralOffset = Mathf.Abs(transform.localPosition.x);
+        AddReward(-0.001f * lateralOffset);
+
+        // Evitar inclinarse o saltar
+        if (!IsGrounded()) AddReward(-0.01f);
+        if (IsTilted()) AddReward(-0.005f);
+    }
+
     private void FixedUpdate()
     {
-        Debug.Log($"FixedUpdate - Velocity: {rb.linearVelocity.magnitude}, AngularVelocity: {rb.angularVelocity.magnitude}");
+        RewardDriving();
+        UpdateWeatherAdaptation();
 
         if (StepCount > MaxStep)
         {
-            Debug.Log($"MaxStep reached ({StepCount}/{MaxStep}). Ending episode.");
             AddReward(-1f);
             EndEpisode();
         }
@@ -324,13 +298,26 @@ public override void OnEpisodeBegin()
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (collision.gameObject.CompareTag("Obstacle") || collision.gameObject.CompareTag("NPC")) { AddReward(-2f); EndEpisode(); }
+        if (collision.gameObject.CompareTag("Obstacle") || collision.gameObject.CompareTag("NPC"))
+        {
+            AddReward(-2f);
+            EndEpisode();
+        }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Boundary")) { AddReward(-2f); EndEpisode(); }
-        else if (other.CompareTag("FinishLine") && !hasFinished) { AddReward(5f); hasFinished = true; EndEpisode(); }
+        if (other.CompareTag("Boundary"))
+        {
+            AddReward(-2f);
+            EndEpisode();
+        }
+        else if (other.CompareTag("FinishLine") && !hasFinished)
+        {
+            AddReward(5f);
+            hasFinished = true;
+            EndEpisode();
+        }
     }
 
     private void ResetCar()
@@ -352,13 +339,7 @@ public override void OnEpisodeBegin()
         {
             float angle = rayCount == 1 ? 0f : (-raySpreadAngle / 2 + i * angleStep);
             Vector3 dir = Quaternion.Euler(0, angle, 0) * transform.forward;
-            float adjDist = raycastDistance * (WeatherManager.Instance?.GetVisibilityFactor() ?? 1f);
-            Gizmos.DrawRay(transform.position, dir * adjDist);
+            Gizmos.DrawRay(transform.position, dir * 5f);
         }
     }
-
-    public void SetInitialLocation(string newLocation) => initialLocation = newLocation;
-    public DriverProfile GetCurrentDriverProfile() => currentDriverProfile;
-
-    private void Log(string msg) => Debug.Log($"CarAgent: {msg}");
 }
