@@ -1,10 +1,9 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
-using System.Linq;
 
 public class CarAgent : Agent
 {
@@ -16,603 +15,308 @@ public class CarAgent : Agent
     public LayerMask roadLayer;
     public int rayCount = 5;
     public float raySpreadAngle = 45f;
-    
+
     [Header("Weather Adaptation")]
     public float rainSpeedAdaptationRate = 0.1f;
     public float rainSteeringAdaptationRate = 0.05f;
-    
+
     [Header("Driver Data Configuration")]
     public TextAsset driverDataFile;
     public string initialLocation = "La Guaira";
-    
+
     private Rigidbody rb;
     private WheelCollider[] wheels;
-    private bool hasFinished = false;
+    private bool hasFinished;
     private float currentSteerInput;
     private float currentThrottleInput;
-    private float previousSteerInput;
 
     private float currentMotorForce;
     private float currentSteeringResponse;
-    private float weatherAdaptationLevel = 0f;
+    private float weatherAdaptationLevel;
 
     private DriverProfile currentDriverProfile;
     private List<DriverProfile> driverProfiles;
     private float baseMotorForce;
     private float baseSteeringAngle;
-    
+
     [System.Serializable]
     public class DriverProfile
     {
         public string year;
         public int peopleCount;
-
-        public float speed;
-        public float initialSpeed;
-        public float maxSpeed;
-        public float averageSpeed;
-
-        public string location;
-        public string roadType;
-        public string livingZone;
-
-        public string preferredEntrance;
-        public string drivingStyle;
-
-        public float externalReactionPercent;
-        public float deviationPercent;
-        public float speedChangePercent;
-
+        public float speed, initialSpeed, maxSpeed, averageSpeed;
+        public string location, roadType, livingZone;
+        public string preferredEntrance, drivingStyle;
+        public float externalReactionPercent, deviationPercent, speedChangePercent;
         public float estimatedDelay;
-
-        public string carType;
-        public string vehicleType;
-        public string transmission;
-        public string condition;
-
-        public string delayReported;
-        public string accompanied;
-
-        public string leaveHomeTime;
-        public string arriveUnimetTime;
-
-        public string school;
-        public string trafficEstimate;
-
-        // Behaviour factors
-        public float speedMultiplier;
-        public float steeringMultiplier;
-        public float riskFactor;
-        public float patienceFactor;
+        public string carType, vehicleType, transmission, condition;
+        public string delayReported, accompanied, leaveHomeTime, arriveUnimetTime;
+        public string school, trafficEstimate;
+        public float speedMultiplier, steeringMultiplier, riskFactor, patienceFactor;
     }
-    
+
     protected override void Awake()
     {
-        Debug.Log("CarAgent.Awake() - Iniciando");
+        Debug.Log("Awake CarAgent ejecutado");
         
         rb = GetComponent<Rigidbody>();
+        if(rb == null) Debug.LogWarning("No hay Rigidbody asignado!");
+        
         wheels = GetComponentsInChildren<WheelCollider>();
+        Debug.Log($"Ruedas encontradas: {wheels.Length}");
+        
         rb.centerOfMass = new Vector3(0, -0.5f, 0);
         
         currentMotorForce = motorForce;
         currentSteeringResponse = 1f;
-        
         baseMotorForce = motorForce;
         baseSteeringAngle = steeringAngle;
-        
-        LoadDriverProfiles();
-        
-        Debug.Log($"CarAgent.Awake() - Completado. Ruedas encontradas: {wheels.Length}");
+    }
+
+    private void SnapCarAboveGround()
+    {
+        if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, 10f, roadLayer))
+        {
+            // Altura deseada desde el suelo hasta el centro del carro
+            float heightAboveGround = 0.2f; 
+
+            Vector3 targetPos = hit.point + Vector3.up * heightAboveGround;
+            transform.position = targetPos;
+
+            // Opcional: alinear el carro con la normal del terreno
+            transform.rotation = Quaternion.FromToRotation(transform.up, hit.normal) * transform.rotation;
+        }
     }
 
     private void LoadDriverProfiles()
     {
-        Debug.Log("CarAgent.LoadDriverProfiles() - Cargando perfiles");
-        
         driverProfiles = new List<DriverProfile>();
-        
         if (driverDataFile == null)
         {
-            Debug.LogError("No se ha asignado el archivo de datos de conductores!");
+            Debug.LogError("Archivo de datos de conductores no asignado");
             return;
         }
-        
-        string[] lines = driverDataFile.text.Split('\n');
-        Debug.Log($"CarAgent.LoadDriverProfiles() - Líneas en archivo: {lines.Length}");
-        
+
+        var lines = driverDataFile.text.Split('\n');
         int loadedCount = 0;
-        foreach (string line in lines)
+
+        foreach (var line in lines)
         {
-            if (string.IsNullOrEmpty(line.Trim())) continue;
-            
-            DriverProfile profile = ParseDriverData(line);
-            if (profile != null) 
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var profile = ParseDriverData(line);
+            if (profile != null)
             {
                 driverProfiles.Add(profile);
                 loadedCount++;
             }
         }
-        
-        Debug.Log($"CarAgent.LoadDriverProfiles() - Se cargaron {loadedCount} perfiles de conductores");
+
+        Debug.Log($"Se cargaron {loadedCount} perfiles de conductores");
     }
 
     private DriverProfile ParseDriverData(string line)
     {
-        try
+        if (string.IsNullOrWhiteSpace(line)) return null;
+        var profile = new DriverProfile();
+        foreach (var raw in line.Split('|'))
         {
-            DriverProfile p = new DriverProfile();
-            string[] parts = line.Split('|');
-
-            foreach (string raw in parts)
+            var kv = raw.Split(':');
+            if (kv.Length < 2) continue;
+            var key = kv[0].Trim(); 
+            var value = kv[1].Trim();
+            switch (key)
             {
-                string[] kv = raw.Split(':');
-                if (kv.Length < 2) continue;
-
-                string key = kv[0].Trim();
-                string value = kv[1].Trim();
-
-                switch (key)
-                {
-                    case "Año":
-                        p.year = value;
-                        break;
-
-                    case "Número de personas":
-                        int.TryParse(value, out p.peopleCount);
-                        break;
-
-                    case "Velocidad":
-                        float.TryParse(value, out p.speed);
-                        break;
-
-                    case "Velocidad inicial":
-                        float.TryParse(value, out p.initialSpeed);
-                        break;
-
-                    case "Velocidad máximo":
-                        float.TryParse(value, out p.maxSpeed);
-                        break;
-
-                    case "Velocidad promedio":
-                        float.TryParse(value, out p.averageSpeed);
-                        break;
-
-                    case "Ubicación":
-                        p.location = value;
-                        break;
-
-                    case "Tipo de vía":
-                        p.roadType = value;
-                        break;
-
-                    case "Zona donde vive":
-                        p.livingZone = value;
-                        break;
-
-                    case "Entrada preferida":
-                        p.preferredEntrance = value;
-                        break;
-
-                    case "Estilo de manejo":
-                        p.drivingStyle = value;
-                        break;
-
-                    case "reacción a situación externa (%)":
-                        float.TryParse(value, out p.externalReactionPercent);
-                        break;
-
-                    case "desvío (%)":
-                        float.TryParse(value, out p.deviationPercent);
-                        break;
-
-                    case "cambio de velocidad (%)":
-                        float.TryParse(value, out p.speedChangePercent);
-                        break;
-
-                    case "Demora estimada (min)":
-                        float.TryParse(value, out p.estimatedDelay);
-                        break;
-
-                    case "Tipo de Carro":
-                        p.carType = value;
-                        break;
-
-                    case "carro/moto/wawa/taxi":
-                        p.vehicleType = value;
-                        if (p.vehicleType.ToLower() == "a pie")
-                            p.vehicleType = "wawa";
-                        break;
-
-                    case "Sincrónico/automático":
-                        p.transmission = value;
-                        break;
-
-                    case "buenas/malas condiciones":
-                        p.condition = value;
-                        break;
-
-                    case "Retraso":
-                        p.delayReported = value;
-                        break;
-
-                    case "Viene acompañado":
-                        p.accompanied = value;
-                        break;
-
-                    case "Hora de salir de la casa":
-                        p.leaveHomeTime = value;
-                        break;
-
-                    case "Hora de llegar a la Unimet":
-                        p.arriveUnimetTime = value;
-                        break;
-
-                    case "Colegio Integral el Ávila":
-                        p.school = value;
-                        break;
-
-                    case "tráfico estimado por los encuestados":
-                        p.trafficEstimate = value;
-                        break;
-                }
+                case "Año": profile.year = value; break;
+                case "Número de personas": int.TryParse(value, out profile.peopleCount); break;
+                case "Velocidad": float.TryParse(value, out profile.speed); break;
+                case "Velocidad inicial": float.TryParse(value, out profile.initialSpeed); break;
+                case "Velocidad máximo": float.TryParse(value, out profile.maxSpeed); break;
+                case "Velocidad promedio": float.TryParse(value, out profile.averageSpeed); break;
+                case "Ubicación": profile.location = value; break;
+                case "Tipo de vía": profile.roadType = value; break;
+                case "Zona donde vive": profile.livingZone = value; break;
+                case "Entrada preferida": profile.preferredEntrance = value; break;
+                case "Estilo de manejo": profile.drivingStyle = value; break;
+                case "reacción a situación externa (%)": float.TryParse(value, out profile.externalReactionPercent); break;
+                case "desvío (%)": float.TryParse(value, out profile.deviationPercent); break;
+                case "cambio de velocidad (%)": float.TryParse(value, out profile.speedChangePercent); break;
+                case "Demora estimada (min)": float.TryParse(value, out profile.estimatedDelay); break;
+                case "Tipo de Carro": profile.carType = value; break;
+                case "carro/moto/wawa/taxi": profile.vehicleType = value.ToLower() == "a pie" ? "wawa" : value; break;
+                case "Sincrónico/automático": profile.transmission = value; break;
+                case "buenas/malas condiciones": profile.condition = value; break;
+                case "Retraso": profile.delayReported = value; break;
+                case "Viene acompañado": profile.accompanied = value; break;
+                case "Hora de salir de la casa": profile.leaveHomeTime = value; break;
+                case "Hora de llegar a la Unimet": profile.arriveUnimetTime = value; break;
+                case "Colegio Integral el Ávila": profile.school = value; break;
+                case "tráfico estimado por los encuestados": profile.trafficEstimate = value; break;
             }
-
-            CalculateBehaviorFactors(p);
-            return p;
         }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error parseando línea: {line}\nError: {e.Message}");
-            return null;
-        }
+        CalculateBehaviorFactors(profile);
+        return profile;
     }
 
-    private void CalculateBehaviorFactors(DriverProfile profile)
+    private void CalculateBehaviorFactors(DriverProfile p)
     {
-        Debug.Log($"CarAgent.CalculateBehaviorFactors() - Calculando factores para perfil");
-        
-        // 1. Estilo de manejo básico
-        if (profile.drivingStyle.Contains("Prudente"))
-        {
-            profile.speedMultiplier = 0.7f;
-            profile.riskFactor = 0.3f;
-            profile.patienceFactor = 0.8f;
-            Debug.Log("CarAgent.CalculateBehaviorFactors() - Estilo: Prudente");
-        }
-        else if (profile.drivingStyle.Contains("Agresivo"))
-        {
-            profile.speedMultiplier = 1.2f;
-            profile.riskFactor = 0.8f;
-            profile.patienceFactor = 0.3f;
-            Debug.Log("CarAgent.CalculateBehaviorFactors() - Estilo: Agresivo");
-        }
-        else
-        {
-            // Neutral / no definido
-            profile.speedMultiplier = 1.0f;
-            profile.riskFactor = 0.5f;
-            profile.patienceFactor = 0.6f;
-            Debug.Log("CarAgent.CalculateBehaviorFactors() - Estilo: Neutral");
-        }
+        if (p.drivingStyle.Contains("Prudente")) { p.speedMultiplier = 0.7f; p.riskFactor = 0.3f; p.patienceFactor = 0.8f; }
+        else if (p.drivingStyle.Contains("Agresivo")) { p.speedMultiplier = 1.2f; p.riskFactor = 0.8f; p.patienceFactor = 0.3f; }
+        else { p.speedMultiplier = 1f; p.riskFactor = 0.5f; p.patienceFactor = 0.6f; }
 
-        // 2. Ajuste de velocidad por velocidad real promedio
-        if (profile.averageSpeed > 0)
-            profile.speedMultiplier *= Mathf.Clamp(profile.averageSpeed / 30f, 0.5f, 1.5f);
-
-        // 3. Nueva lógica basada en porcentajes (0–100)
-        float reaction = profile.externalReactionPercent;   // reacción a situación externa (%)
-        float deviation = profile.deviationPercent; // desvío (%)
-        float speedChange = profile.speedChangePercent;    // cambio de velocidad (%)
-
-        // Mientras más baja la reacción => más lenta la respuesta
-        profile.steeringMultiplier = Mathf.Lerp(1.2f, 0.6f, reaction / 100f);
-
-        // Mientras más desvío, más inestable el conductor
-        profile.riskFactor += deviation / 200f; // suma entre 0 y 0.5
-
-        // Mientras más cambio de velocidad, menos paciencia
-        profile.patienceFactor -= speedChange / 300f;  // resta entre ~0 y 0.33
-
-        // Clamp valores finales
-        profile.riskFactor = Mathf.Clamp01(profile.riskFactor);
-        profile.patienceFactor = Mathf.Clamp01(profile.patienceFactor);
-        
-        Debug.Log($"CarAgent.CalculateBehaviorFactors() - Factores calculados: " +
-                 $"SpeedMultiplier={profile.speedMultiplier}, " +
-                 $"SteeringMultiplier={profile.steeringMultiplier}, " +
-                 $"RiskFactor={profile.riskFactor}, " +
-                 $"PatienceFactor={profile.patienceFactor}");
+        if (p.averageSpeed > 0) p.speedMultiplier *= Mathf.Clamp(p.averageSpeed / 30f, 0.5f, 1.5f);
+        p.steeringMultiplier = Mathf.Lerp(1.2f, 0.6f, p.externalReactionPercent / 100f);
+        p.riskFactor = Mathf.Clamp01(p.riskFactor + p.deviationPercent / 200f);
+        p.patienceFactor = Mathf.Clamp01(p.patienceFactor - p.speedChangePercent / 300f);
     }
 
     private void SelectDriverProfileByLocation(string location)
     {
-        Debug.Log($"CarAgent.SelectDriverProfileByLocation() - Buscando perfiles para ubicación: {location}");
-        
-        var matches = driverProfiles
-            .Where(p => p.location != null && p.location.ToLower().Contains(location.ToLower()))
-            .ToList();
+        var matches = driverProfiles.Where(p => !string.IsNullOrEmpty(p.location) && p.location.ToLower().Contains(location.ToLower())).ToList();
+        currentDriverProfile = matches.Count > 0 ? matches[Random.Range(0, matches.Count)] : driverProfiles[Random.Range(0, driverProfiles.Count)];
 
-        Debug.Log($"CarAgent.SelectDriverProfileByLocation() - Coincidencias encontradas: {matches.Count}");
-
-        if (matches.Count == 0)
-        {
-            Debug.LogWarning($"No hay perfiles para ubicación '{location}'. Se escogerá uno aleatorio.");
-            currentDriverProfile = driverProfiles[Random.Range(0, driverProfiles.Count)];
-        }
-        else
-        {
-            currentDriverProfile = matches[Random.Range(0, matches.Count)];
-        }
-
-        Debug.Log($"CarAgent.SelectDriverProfileByLocation() - Perfil seleccionado: " +
-                 $"Location={currentDriverProfile.location}, " +
-                 $"DrivingStyle={currentDriverProfile.drivingStyle}");
-
-        // Aplica factores de comportamiento
-        motorForce = baseMotorForce * currentDriverProfile.speedMultiplier;
+        currentMotorForce = baseMotorForce * currentDriverProfile.speedMultiplier;
         steeringAngle = baseSteeringAngle * currentDriverProfile.steeringMultiplier;
-        
-        Debug.Log($"CarAgent.SelectDriverProfileByLocation() - Configuraciones aplicadas: " +
-                 $"MotorForce={motorForce}, SteeringAngle={steeringAngle}");
     }
 
-    public override void OnEpisodeBegin()
+public override void OnEpisodeBegin()
+{
+
+    currentSteerInput = 0f;
+    currentThrottleInput = 0f;
+
+    // Reset de carro y Rigidbody
+    ResetCar();
+
+    SnapCarAboveGround();
+
+    // Log WeatherManager
+    if (WeatherManager.Instance != null)
     {
-        Debug.Log("CarAgent.OnEpisodeBegin() - Iniciando nuevo episodio");
-        
-        currentSteerInput = 0f;
-        currentThrottleInput = 0f;
-
-        // 1. Seleccionar el perfil basado en ubicación (DEL TXT)
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 1: Seleccionando perfil del conductor");
-        SelectDriverProfileByLocation(initialLocation);
-
-        // 2. Resetear el coche
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 2: Reiniciando coche");
-        ResetCar();
-
-        // 3. Reset de otras variables
-        Debug.Log("CarAgent.OnEpisodeBegin() - Paso 3: Reiniciando otras variables");
-        weatherAdaptationLevel = 0f;
+        currentMotorForce = motorForce * WeatherManager.Instance.GetMotorForceMultiplier();
+        currentSteeringResponse = WeatherManager.Instance.GetSteeringMultiplier();
+    }
+    else
+    {
         currentMotorForce = motorForce;
         currentSteeringResponse = 1f;
-        
-        Debug.Log("CarAgent.OnEpisodeBegin() - Episodio inicializado correctamente");
     }
+
+    // Impulso de prueba para debug
+    rb.AddForce(transform.forward * 5f, ForceMode.VelocityChange);
+}
 
     private void UpdateWeatherAdaptation()
     {
-        if (WeatherManager.Instance == null) 
-        {
-            Debug.LogWarning("CarAgent.UpdateWeatherAdaptation() - WeatherManager no encontrado");
-            return;
-        }
+        if (WeatherManager.Instance == null) return;
 
-        Debug.Log($"CarAgent.UpdateWeatherAdaptation() - Lloviendo: {WeatherManager.Instance.isRaining}, " +
-                 $"Intensidad: {WeatherManager.Instance.rainIntensity}");
+        bool raining = WeatherManager.Instance.isRaining;
+        weatherAdaptationLevel = Mathf.Clamp01(weatherAdaptationLevel + Time.deltaTime * (raining ? rainSpeedAdaptationRate : -rainSpeedAdaptationRate));
 
-        if (WeatherManager.Instance.isRaining)
-        {
-            weatherAdaptationLevel = Mathf.Clamp01(weatherAdaptationLevel + Time.deltaTime * rainSpeedAdaptationRate);
+        float targetMotor = raining ? motorForce * WeatherManager.Instance.GetMotorForceMultiplier() : motorForce;
+        float targetSteer = raining ? WeatherManager.Instance.GetSteeringMultiplier() : 1f;
 
-            float targetMF = motorForce * WeatherManager.Instance.GetMotorForceMultiplier();
-            float targetST = WeatherManager.Instance.GetSteeringMultiplier();
+        currentMotorForce = Mathf.Lerp(motorForce, targetMotor, weatherAdaptationLevel);
+        currentSteeringResponse = Mathf.Lerp(1f, targetSteer, weatherAdaptationLevel);
 
-            currentMotorForce = Mathf.Lerp(motorForce, targetMF, weatherAdaptationLevel);
-            currentSteeringResponse = Mathf.Lerp(1f, targetST, weatherAdaptationLevel);
+        float friction = raining ? WeatherManager.Instance.GetFrictionFactor() : 1f;
+        foreach (var w in wheels) { SetWheelFriction(w, friction); }
 
-            Debug.Log($"CarAgent.UpdateWeatherAdaptation() - Adaptación a lluvia: {weatherAdaptationLevel}, " +
-                     $"MotorForce: {currentMotorForce}, SteeringResponse: {currentSteeringResponse}");
+        if (raining) AddReward(0.001f * weatherAdaptationLevel);
+    }
 
-            foreach (WheelCollider w in wheels)
-            {
-                WheelFrictionCurve f = w.forwardFriction;
-                f.stiffness = WeatherManager.Instance.GetFrictionFactor();
-                w.forwardFriction = f;
-
-                WheelFrictionCurve s = w.sidewaysFriction;
-                s.stiffness = WeatherManager.Instance.GetFrictionFactor();
-                w.sidewaysFriction = s;
-            }
-
-            AddReward(0.001f * weatherAdaptationLevel);
-        }
-        else
-        {
-            weatherAdaptationLevel = Mathf.Clamp01(weatherAdaptationLevel - Time.deltaTime * rainSpeedAdaptationRate);
-
-            currentMotorForce = Mathf.Lerp(
-                motorForce * WeatherManager.Instance.GetMotorForceMultiplier(),
-                motorForce,
-                weatherAdaptationLevel
-            );
-
-            currentSteeringResponse = Mathf.Lerp(
-                WeatherManager.Instance.GetSteeringMultiplier(),
-                1f,
-                weatherAdaptationLevel
-            );
-
-            Debug.Log($"CarAgent.UpdateWeatherAdaptation() - Adaptación reduciendo: {weatherAdaptationLevel}");
-
-            foreach (WheelCollider w in wheels)
-            {
-                WheelFrictionCurve f = w.forwardFriction;
-                f.stiffness = 1f;
-                w.forwardFriction = f;
-
-                WheelFrictionCurve s = w.sidewaysFriction;
-                s.stiffness = 1f;
-                w.sidewaysFriction = s;
-            }
-        }
+    private void SetWheelFriction(WheelCollider w, float stiffness)
+    {
+        var f = w.forwardFriction; f.stiffness = stiffness; w.forwardFriction = f;
+        var s = w.sidewaysFriction; s.stiffness = stiffness; w.sidewaysFriction = s;
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        Debug.Log("CarAgent.CollectObservations() - Recolectando observaciones");
-        
         float velocity = rb.linearVelocity.magnitude / 20f;
         float forwardDot = Vector3.Dot(transform.forward, Vector3.forward);
-        
+
         sensor.AddObservation(velocity);
         sensor.AddObservation(forwardDot);
-        
-        Debug.Log($"CarAgent.CollectObservations() - Observaciones básicas: Velocidad={velocity}, ForwardDot={forwardDot}");
 
         float angleStep = rayCount > 1 ? raySpreadAngle / (rayCount - 1) : 0f;
 
         for (int i = 0; i < rayCount; i++)
         {
-            float angle = (rayCount == 1)
-                ? 0f
-                : (-raySpreadAngle / 2 + i * angleStep);
-
+            float angle = rayCount == 1 ? 0f : (-raySpreadAngle / 2 + i * angleStep);
             Vector3 dir = Quaternion.Euler(0, angle, 0) * transform.forward;
+            float adjDist = raycastDistance * (WeatherManager.Instance?.GetVisibilityFactor() ?? 1f);
 
-            float adjDist = raycastDistance;
-            if (WeatherManager.Instance != null)
-                adjDist *= WeatherManager.Instance.GetVisibilityFactor();
-
-            if (Physics.Raycast(transform.position, dir, out RaycastHit hit, adjDist, roadLayer))
-            {
-                sensor.AddObservation(hit.distance / adjDist);
-                Debug.DrawRay(transform.position, dir * hit.distance, Color.green);
-                Debug.Log($"CarAgent.CollectObservations() - Rayo {i}: Impacto a distancia {hit.distance}");
-            }
-            else
-            {
-                sensor.AddObservation(0f);
-                Debug.DrawRay(transform.position, dir * adjDist, Color.red);
-                Debug.Log($"CarAgent.CollectObservations() - Rayo {i}: Sin impacto");
-            }
+            sensor.AddObservation(Physics.Raycast(transform.position, dir, out RaycastHit hit, adjDist, roadLayer) ? hit.distance / adjDist : 0f);
         }
 
         sensor.AddObservation(transform.up.y);
 
-        foreach (var wheel in wheels) 
-        {
-            sensor.AddObservation(wheel.isGrounded);
-            Debug.Log($"CarAgent.CollectObservations() - Rueda {wheel.name}: Grounded={wheel.isGrounded}");
-        }
+        foreach (var wheel in wheels) sensor.AddObservation(wheel.isGrounded);
 
-        if (WeatherManager.Instance != null)
-        {
-            sensor.AddObservation(WeatherManager.Instance.isRaining ? 1f : 0f);
-            sensor.AddObservation(WeatherManager.Instance.rainIntensity);
-            sensor.AddObservation(weatherAdaptationLevel);
-            
-            Debug.Log($"CarAgent.CollectObservations() - Clima: Raining={WeatherManager.Instance.isRaining}, " +
-                     $"Intensity={WeatherManager.Instance.rainIntensity}, " +
-                     $"Adaptation={weatherAdaptationLevel}");
-        }
-        else
-        {
-            sensor.AddObservation(0f);
-            sensor.AddObservation(0f);
-            sensor.AddObservation(0f);
-            Debug.Log("CarAgent.CollectObservations() - Sin WeatherManager");
-        }
+        sensor.AddObservation(WeatherManager.Instance?.isRaining == true ? 1f : 0f);
+        sensor.AddObservation(WeatherManager.Instance?.rainIntensity ?? 0f);
+        sensor.AddObservation(weatherAdaptationLevel);
 
         if (currentDriverProfile != null)
         {
             sensor.AddObservation(currentDriverProfile.speedMultiplier);
             sensor.AddObservation(currentDriverProfile.riskFactor);
             sensor.AddObservation(currentDriverProfile.patienceFactor);
-            
-            Debug.Log($"CarAgent.CollectObservations() - Perfil: SpeedMultiplier={currentDriverProfile.speedMultiplier}, " +
-                     $"RiskFactor={currentDriverProfile.riskFactor}, " +
-                     $"PatienceFactor={currentDriverProfile.patienceFactor}");
         }
         else
         {
-            sensor.AddObservation(1f);
-            sensor.AddObservation(0.5f);
-            sensor.AddObservation(0.5f);
-            Debug.LogError("CarAgent.CollectObservations() - Sin perfil de conductor!");
+            sensor.AddObservation(1f); sensor.AddObservation(0.5f); sensor.AddObservation(0.5f);
         }
-        
-        Debug.Log($"CarAgent.CollectObservations() - Total observaciones: {sensor.ObservationSize()}");
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        Debug.Log("CarAgent.OnActionReceived() - Recibiendo acciones del modelo");
-        
-        float steerInput = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
-        float throttleInput = Mathf.Clamp(actions.ContinuousActions[1], 0f, 1f);
-        
-        Debug.Log($"CarAgent.OnActionReceived() - Acciones crudas: Steer={steerInput}, Throttle={throttleInput}");
-        
-        currentSteerInput = Mathf.Lerp(currentSteerInput, steerInput, 0.1f);
-        currentThrottleInput = Mathf.Lerp(currentThrottleInput, throttleInput, 0.15f);
-        
-        Debug.Log($"CarAgent.OnActionReceived() - Acciones suavizadas: Steer={currentSteerInput}, Throttle={currentThrottleInput}");
+        currentSteerInput = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
+
+        currentThrottleInput = Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f);
 
         ApplySteering(currentSteerInput);
         ApplyMotor(currentThrottleInput);
+
+        Debug.Log($"RawActions -> Steer: {currentSteerInput:F2}, Throttle: {currentThrottleInput:F2}");
     }
 
     private void ApplySteering(float steerInput)
     {
-        Debug.Log($"CarAgent.ApplySteering() - Aplicando dirección: {steerInput}");
-        
         foreach (var wheel in wheels)
         {
-            if (wheel.transform.localPosition.z > 0)
-            {
-                float angle = steerInput * steeringAngle * currentSteeringResponse;
-                wheel.steerAngle = angle;
-                Debug.Log($"CarAgent.ApplySteering() - Rueda {wheel.name}: Ángulo={angle}");
-            }
+            if (wheel.transform.localPosition.z > 0) // delanteras
+                wheel.steerAngle = steerInput * steeringAngle * currentSteeringResponse;
         }
     }
 
     private void ApplyMotor(float throttleInput)
-    {
-        Debug.Log($"CarAgent.ApplyMotor() - Aplicando aceleración: {throttleInput}");
-        
+    {   
+        Debug.Log($"=== ApplyMotor === ThrottleInput={throttleInput}, currentMotorForce={currentMotorForce}");
+
         foreach (var wheel in wheels)
         {
             if (wheel.transform.localPosition.z < 0)
             {
                 float torque = throttleInput * currentMotorForce;
                 wheel.motorTorque = torque;
-                Debug.Log($"CarAgent.ApplyMotor() - Rueda {wheel.name}: Torque={torque}");
+                Debug.Log($"Wheel {wheel.name}: motorTorque={torque}");
             }
-        }
+        }     
+        foreach (var wheel in wheels) { Debug.Log($"Wheel {wheel.name}: motorTorque={wheel.motorTorque}, steerAngle={wheel.steerAngle}, WheelGrounded {wheel.isGrounded}"); } 
     }
 
-    private bool IsGrounded()
-    {
-        bool allGrounded = true;
-        foreach (var wheel in wheels)
-        {
-            if (!wheel.isGrounded)
-            {
-                allGrounded = false;
-                Debug.Log($"CarAgent.IsGrounded() - Rueda {wheel.name} NO está en suelo");
-            }
-        }
-        
-        Debug.Log($"CarAgent.IsGrounded() - Todas las ruedas en suelo: {allGrounded}");
-        return allGrounded;
-    }
-
-    private bool IsTilted()
-    {
-        float angle = Vector3.Angle(transform.up, Vector3.up);
-        bool tilted = angle > 45f;
-        
-        Debug.Log($"CarAgent.IsTilted() - Ángulo de inclinación: {angle}, ¿Inclinado?: {tilted}");
-        return tilted;
-    }
+    private bool IsGrounded() => wheels.All(w => w.isGrounded);
+    private bool IsTilted() => Vector3.Angle(transform.up, Vector3.up) > 45f;
 
     private void FixedUpdate()
     {
+        Debug.Log($"FixedUpdate - Velocity: {rb.linearVelocity.magnitude}, AngularVelocity: {rb.angularVelocity.magnitude}");
+
         if (StepCount > MaxStep)
         {
-            Debug.Log($"CarAgent.FixedUpdate() - Máximo de pasos alcanzado ({StepCount}/{MaxStep}). Finalizando episodio.");
+            Debug.Log($"MaxStep reached ({StepCount}/{MaxStep}). Ending episode.");
             AddReward(-1f);
             EndEpisode();
         }
@@ -620,89 +324,41 @@ public class CarAgent : Agent
 
     private void OnCollisionEnter(Collision collision)
     {
-        Debug.Log($"CarAgent.OnCollisionEnter() - Colisión con: {collision.gameObject.name}, Tag: {collision.gameObject.tag}");
-        
-        if (collision.gameObject.CompareTag("Obstacle") || collision.gameObject.CompareTag("NPC"))
-        {
-            Debug.Log($"CarAgent.OnCollisionEnter() - Colisión con obstáculo/NPC. Penalizando.");
-            AddReward(-2f);
-            EndEpisode();
-        }
+        if (collision.gameObject.CompareTag("Obstacle") || collision.gameObject.CompareTag("NPC")) { AddReward(-2f); EndEpisode(); }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        Debug.Log($"CarAgent.OnTriggerEnter() - Trigger con: {other.gameObject.name}, Tag: {other.gameObject.tag}");
-        
-        if (other.CompareTag("Boundary"))
-        {
-            Debug.Log("CarAgent.OnTriggerEnter() - Salida de límites. Penalizando.");
-            AddReward(-2f);
-            EndEpisode();
-        }
-        else if (other.CompareTag("FinishLine") && !hasFinished)
-        {
-            Debug.Log("CarAgent.OnTriggerEnter() - ¡Línea de meta alcanzada! Recompensando.");
-            AddReward(5f);
-            hasFinished = true;
-            EndEpisode();
-        }
+        if (other.CompareTag("Boundary")) { AddReward(-2f); EndEpisode(); }
+        else if (other.CompareTag("FinishLine") && !hasFinished) { AddReward(5f); hasFinished = true; EndEpisode(); }
     }
 
     private void ResetCar()
     {
-        Debug.Log("CarAgent.ResetCar() - Reiniciando coche");
-        
-        // Reposicionar coche en la posición de reset
         transform.position = resetPosition.position;
         transform.rotation = resetPosition.rotation;
-        Debug.Log($"CarAgent.ResetCar() - Posición reiniciada a: {transform.position}");
-
-        // Reset de física
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-
         hasFinished = false;
 
-        // Reiniciar ruedas
-        foreach (var wheel in wheels)
-        {
-            wheel.motorTorque = 0f;
-            wheel.steerAngle = 0f;
-            wheel.brakeTorque = 0f;
-        }
-        
-        Debug.Log("CarAgent.ResetCar() - Coche reiniciado correctamente");
+        foreach (var wheel in wheels) { wheel.motorTorque = 0f; wheel.steerAngle = 0f; wheel.brakeTorque = 0f; }
     }
 
     private void OnDrawGizmos()
     {
         Gizmos.color = Color.cyan;
-
+        float angleStep = rayCount > 1 ? raySpreadAngle / (rayCount - 1) : 0f;
         for (int i = 0; i < rayCount; i++)
         {
-            float angle = (rayCount == 1)
-                ? 0f
-                : (-raySpreadAngle / 2 + i * (raySpreadAngle / (rayCount - 1)));
-
+            float angle = rayCount == 1 ? 0f : (-raySpreadAngle / 2 + i * angleStep);
             Vector3 dir = Quaternion.Euler(0, angle, 0) * transform.forward;
-
-            float adjDist = raycastDistance;
-            if (WeatherManager.Instance != null)
-                adjDist *= WeatherManager.Instance.GetVisibilityFactor();
-
+            float adjDist = raycastDistance * (WeatherManager.Instance?.GetVisibilityFactor() ?? 1f);
             Gizmos.DrawRay(transform.position, dir * adjDist);
         }
     }
 
-    public void SetInitialLocation(string newLocation)
-    {
-        Debug.Log($"CarAgent.SetInitialLocation() - Cambiando ubicación inicial de {initialLocation} a {newLocation}");
-        initialLocation = newLocation;
-    }
+    public void SetInitialLocation(string newLocation) => initialLocation = newLocation;
+    public DriverProfile GetCurrentDriverProfile() => currentDriverProfile;
 
-    public DriverProfile GetCurrentDriverProfile()
-    {
-        return currentDriverProfile;
-    }
+    private void Log(string msg) => Debug.Log($"CarAgent: {msg}");
 }
