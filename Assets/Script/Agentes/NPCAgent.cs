@@ -89,7 +89,14 @@ public class NPCAgent : MonoBehaviour
         Debug.Log($"NPCAgent {gameObject.name} - Nodo inicial: {currentNode.name}, Posición: {currentNode.position}");
         
         // Encontrar un destino inicial
-        FindNewDestination();
+        if (targetNode == null)
+        {
+            FindNewDestination();
+        }
+        else
+        {
+            CalculatePathToTarget();
+        }
         
         isInitialized = true;
         Debug.Log($"NPCAgent {gameObject.name} - Inicializado correctamente");
@@ -203,9 +210,10 @@ public class NPCAgent : MonoBehaviour
         
     public void CalculatePathToTarget()
     {
+        if (this == null) return;  
         if (currentNode == null || targetNode == null)
         {
-            Debug.LogError($"NPCAgent {gameObject.name}: No se puede calcular ruta - nodo actual o destino nulo");
+            Debug.LogWarning($"NPCAgent {gameObject.name}: Nodo actual o destino nulo");
             return;
         }
         
@@ -222,6 +230,8 @@ public class NPCAgent : MonoBehaviour
         }
         
         roadGraphSystem.roadGraph.RebuildAllConnections();
+        currentNode = roadGraphSystem.roadGraph.GetNodeById(currentNode.id);
+        targetNode = roadGraphSystem.roadGraph.GetNodeById(targetNode.id);
         currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
         currentPathIndex = 0;
         
@@ -332,6 +342,7 @@ public class NPCAgent : MonoBehaviour
             Debug.Log($"NPCAgent {gameObject.name} - Encontró semáforo. Esperando...");
             isWaitingAtIntersection = true;
             intersectionWaitTimer = 0f;
+            waitTimeAtIntersection = Random.Range(2f, 5f);
         }
         
         if (other.CompareTag("Boundary"))
@@ -438,5 +449,10 @@ public class NPCAgent : MonoBehaviour
                $"Velocidad: {speed:F1}\n" +
                $"Ruta: {currentPath?.Count ?? 0} nodos\n" +
                $"Esperando: {isWaitingAtIntersection}";
+    }
+    private void OnDestroy()
+    {
+        StopAllCoroutines();
+        Debug.Log($"{gameObject.name} destruido: corutinas detenidas");
     }
 }

@@ -395,15 +395,18 @@ public class TrafficManager : MonoBehaviour
         
         // Seleccionar nodo de spawn aleatorio
         GraphNode spawnNode = spawnNodes[Random.Range(0, spawnNodes.Count)];
-        
-        // Seleccionar nodo destino aleatorio
         GraphNode targetNode = targetNodes[Random.Range(0, targetNodes.Count)];
-        
+
+        // 🔹 CAMBIO: Asegurar que spawnNode y targetNode estén conectados
+        spawnNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(spawnNode) ?? spawnNode;
+        targetNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(targetNode) ?? targetNode;
+
         // Evitar que sea el mismo nodo
         int attempts = 0;
         while (spawnNode == targetNode && attempts < 5)
         {
             targetNode = targetNodes[Random.Range(0, targetNodes.Count)];
+            targetNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(targetNode) ?? targetNode;
             attempts++;
         }
         
@@ -458,32 +461,48 @@ public class TrafficManager : MonoBehaviour
         }
     }
     
-    IEnumerator InitializeNPCDelayed(NPCAgent agent)
+   IEnumerator InitializeNPCDelayed(NPCAgent agent)
     {
         // Esperar un frame para que Unity inicialice el GameObject
         yield return null;
-        
-        // Forzar cálculo de ruta
+
+        // ⚡ Protección: si el NPC ya fue destruido, salir
+        if (agent == null) yield break;
+
+        // 🔹 CAMBIO: Asegurar conexiones antes de calcular ruta
+        roadGraphSystem.roadGraph.RebuildAllConnections();
+
         agent.CalculatePathToTarget();
-        
-        // Verificar si tiene ruta
+
+        // ⚡ Protección: validar de nuevo después del cálculo
+        if (agent == null) yield break;
+
+        // Si no hay ruta válida, intentar reintento
         if (agent.currentPath == null || agent.currentPath.Count == 0)
         {
             Debug.LogWarning($"NPC {agent.name} no pudo calcular ruta inicial. Reintentando...");
-            
-            // Esperar y reintentar
             yield return new WaitForSeconds(0.5f);
+
+            if (agent == null) yield break; // ⚡ Validación antes de reintento
             agent.CalculatePathToTarget();
-            
-            if (agent.currentPath == null || agent.currentPath.Count == 0)
+
+            // 🔹 CAMBIO: Si sigue sin ruta, intentar nodo destino alternativo
+            if (agent == null || agent.currentPath == null || agent.currentPath.Count == 0)
             {
-                Debug.LogError($"NPC {agent.name} no tiene ruta válida. Será eliminado.");
-                RemoveNPC(agent);
+                Debug.LogWarning($"NPC {agent?.name ?? "null"} sigue sin ruta. Buscando nodo destino conectado...");
+                GraphNode fallbackTarget = roadGraphSystem.roadGraph.FindClosestConnectedNode(agent.targetNode);
+                if (fallbackTarget != null)
+                {
+                    agent.targetNode = fallbackTarget;
+                    agent.CalculatePathToTarget();
+                }
+
+                if (agent.currentPath == null || agent.currentPath.Count == 0)
+                {
+                    Debug.LogError($"NPC {agent?.name ?? "null"} no tiene ruta válida. Será eliminado.");
+                    RemoveNPC(agent); // Llamar al TrafficManager para eliminarlo
+                }
             }
-        }
-        else
-        {
-            Debug.Log($"NPC {agent.name} tiene ruta con {agent.currentPath.Count} nodos");
         }
     }
     
@@ -583,32 +602,40 @@ public class TrafficManager : MonoBehaviour
     
     void CleanupNPCs()
     {
+        List<NPCAgent> toRemove = new List<NPCAgent>();
+
         for (int i = activeNPCs.Count - 1; i >= 0; i--)
         {
             NPCAgent npc = activeNPCs[i];
-            
-            // Si el NPC fue destruido, eliminarlo de la lista
+
+            // Si ya fue destruido
             if (npc == null)
             {
                 activeNPCs.RemoveAt(i);
                 continue;
             }
-            
-            // Eliminar NPCs muy lejanos del jugador
+
+            // Si está muy lejos
             if (playerTransform != null)
             {
                 float distanceToPlayer = Vector3.Distance(playerTransform.position, npc.transform.position);
-                if (distanceToPlayer > 500f) // 500 unidades de distancia
+                if (distanceToPlayer > 500f)
                 {
-                    Debug.Log($"Removiendo NPC {npc.name} por distancia ({distanceToPlayer:F1} unidades)");
-                    RemoveNPC(npc);
+                    toRemove.Add(npc);
                 }
             }
+        }
+
+        // Eliminar después del loop
+        foreach (var npc in toRemove)
+        {
+            RemoveNPC(npc);
         }
     }
     
     public void RemoveNPC(NPCAgent npc)
-    {
+    {   
+        if (npc == null) return;
         if (npc != null && activeNPCs.Contains(npc))
         {
             Debug.Log($"Removiendo NPC: {npc.name}");

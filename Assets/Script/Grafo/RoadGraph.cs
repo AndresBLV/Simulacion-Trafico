@@ -141,10 +141,14 @@ public class RoadGraph
         return path;
     }
     
-    public GraphNode GetNearestNode(Vector3 position)
+    public GraphNode GetNearestNode(Vector3 position, float maxDistance = 5f)
     {
-        if (nodes.Count == 0) return null;
-        return nodes.OrderBy(n => Vector3.Distance(n.position, position)).First();
+        var nearest = nodes
+            .Where(n => Vector3.Distance(n.position, position) <= maxDistance)
+            .OrderBy(n => Vector3.Distance(n.position, position))
+            .FirstOrDefault();
+
+        return nearest;
     }
     
     // Método para reconstruir todas las conexiones después de la deserialización
@@ -161,7 +165,7 @@ public class RoadGraph
         }
     }
     
-    public void CleanInvalidEdges()
+    public void CleanInvalidEdges(float maxEdgeDistance = 8f)
     {
         int removedEdges = 0;
         
@@ -173,11 +177,28 @@ public class RoadGraph
             var startNode = GetNodeById(edge.startNodeId);
             var endNode = GetNodeById(edge.endNodeId);
             
+            bool remove = false;
+
+            // Eliminar aristas con nodos nulos
             if (startNode == null || endNode == null)
+            {
+                remove = true;
+            }
+            else
+            {
+                // Eliminar aristas demasiado largas
+                float distance = Vector3.Distance(startNode.position, endNode.position);
+                if (distance > maxEdgeDistance)
+                {
+                    remove = true;
+                    Debug.LogWarning($"ARISTA DEMASIADO LARGA ELIMINADA: {startNode.originalName} -> {endNode.originalName} | Dist: {distance}");
+                }
+            }
+            
+            if (remove)
             {
                 edgesToRemove.Add(edge);
                 removedEdges++;
-                Debug.LogWarning($"Removiendo arista inválida: {edge.startNodeId}->{edge.endNodeId}");
             }
         }
         
@@ -189,9 +210,49 @@ public class RoadGraph
         
         if (removedEdges > 0)
         {
-            Debug.Log($"Removidas {removedEdges} aristas inválidas");
+            Debug.Log($"Removidas {removedEdges} aristas inválidas o demasiado largas");
             RebuildAllConnections();
         }
+    }
+
+    public void RemoveEdge(GraphNode start, GraphNode end)
+    {
+        // Eliminar la arista desde start hacia end
+        edges.RemoveAll(e => e.startNodeId == start.id && e.endNodeId == end.id);
+        
+        // También eliminar la arista desde end hacia start (si el grafo es bidireccional)
+        edges.RemoveAll(e => e.startNodeId == end.id && e.endNodeId == start.id);
+
+        // Limpiar las listas de edges de los nodos
+        start.edges.RemoveAll(e => e.endNodeId == end.id);
+        end.edges.RemoveAll(e => e.endNodeId == start.id);
+    }
+
+    public GraphNode FindClosestConnectedNode(GraphNode node)
+    {
+        if (node == null) return null;
+
+        // Si el nodo ya tiene conexiones, devolverlo
+        if (node.edges != null && node.edges.Count > 0)
+            return node;
+
+        // Buscar nodo cercano en el grafo que tenga conexiones
+        GraphNode closest = null;
+        float minDistance = float.MaxValue;
+
+        foreach (var n in nodes)
+        {
+            if (n == null || n.edges == null || n.edges.Count == 0) continue;
+
+            float dist = Vector3.Distance(node.position, n.position);
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                closest = n;
+            }
+        }
+
+        return closest;
     }
 
         public List<GraphNode> FindNodesByName(string name, bool exactMatch = false)

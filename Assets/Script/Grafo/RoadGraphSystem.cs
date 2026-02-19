@@ -100,22 +100,7 @@ public class RoadGraphSystem : MonoBehaviour
     {
         if (buildOnAwake)
         {
-            BuildGraphAutomatically();
-            
-            if (roadGraph != null && roadGraph.nodes.Count > 0)
-            {
-                roadGraph.CleanInvalidEdges();
-                roadGraph.RebuildAllConnections();
-                
-                // Mostrar nodos especiales creados
-                ShowSpecialNodesInfo();
-                
-                Debug.Log($"Grafo inicializado: {roadGraph.nodes.Count} nodos, {roadGraph.edges.Count} aristas válidas");
-            }
-            else
-            {
-                Debug.Log("Grafo vacío. Para construir el grafo, asegúrate de tener RoadArchitectSystem en la escena.");
-            }
+            StartCoroutine(BuildGraphCoroutine());
         }
         else
         {
@@ -129,7 +114,7 @@ public class RoadGraphSystem : MonoBehaviour
         
         if (roadArchitectContainer != null)
         {
-            BuildGraphFromRoadArchitect(roadArchitectContainer);
+            StartCoroutine(BuildGraphFromRoadArchitectCoroutine(roadArchitectContainer));
         }
         else
         {
@@ -160,292 +145,202 @@ public class RoadGraphSystem : MonoBehaviour
         Debug.LogWarning("No se encontró RoadArchitectSystem en la jerarquía.");
         return null;
     }
-    
-    public void BuildGraphFromRoadArchitect(GameObject roadArchitectContainer)
+
+    IEnumerator BuildGraphCoroutine()
     {
-        roadGraph = new RoadGraph();
-        ClearVisualIndicators();
-        
-        if (roadArchitectContainer == null)
+        GameObject roadArchitect = FindRoadArchitectSystem();
+        if (roadArchitect == null)
         {
-            Debug.LogError("El contenedor de Road Architect es nulo");
-            return;
+            Debug.LogWarning("Road Architect no encontrado.");
+            yield break;
         }
-        
-        Debug.Log($"Construyendo grafo desde: {roadArchitectContainer.name} (Ruta: {GetFullPath(roadArchitectContainer.transform)})");
-        
-        Transform roadArchitectSystem = roadArchitectContainer.transform;
-        
-        // Diccionario para evitar nodos duplicados en la misma posición
-        Dictionary<Vector3Int, GraphNode> positionToNode = new Dictionary<Vector3Int, GraphNode>();
-        
-        // Función para redondear posición a una precisión determinada
-        Vector3Int RoundPosition(Vector3 position, float precision = 0.5f)
-        {
-            return new Vector3Int(
-                Mathf.RoundToInt(position.x / precision),
-                Mathf.RoundToInt(position.y / precision),
-                Mathf.RoundToInt(position.z / precision)
-            );
-        }
-        
-        // ========== PROCESAR INTERSECCIONES ==========
-        List<GraphNode> intersectionNodes = new List<GraphNode>();
-        Transform intersectionsFolder = roadArchitectSystem.Find("Intersections");
-        
-        if (intersectionsFolder != null)
-        {
-            Debug.Log($"Carpeta 'Intersections' encontrada con {intersectionsFolder.childCount} hijos");
-            
-            foreach (Transform intersection in intersectionsFolder)
-            {
-                // Solo procesar objetos que comiencen con "Inter"
-                if (intersection.name.StartsWith("Inter"))
-                {
-                    Vector3Int roundedPos = RoundPosition(intersection.position, 1f);
-                    
-                    if (!positionToNode.ContainsKey(roundedPos))
-                    {
-                        GraphNode intersectionNode = roadGraph.AddNode(
-                            intersection.position, 
-                            intersection.name, 
-                            "Intersection"
-                        );
-                        intersectionNode.isIntersection = true;
-                        intersectionNode.nodeType = "intersection";
-                        
-                        // ASIGNAR NOMBRE ESPECIAL si está en el diccionario
-                        if (specialNodeNames.ContainsKey(intersection.name))
-                        {
-                            intersectionNode.specialName = specialNodeNames[intersection.name];
-                            Debug.Log($"¡NODO ESPECIAL CREADO! {intersection.name} -> {intersectionNode.specialName}");
-                        }
-                        
-                        intersectionNodes.Add(intersectionNode);
-                        positionToNode[roundedPos] = intersectionNode;
-                        
-                        // Crear indicador visual
-                        CreateVisualIndicator(intersectionNode.position, intersectionIndicatorPrefab);
-                        
-                        Debug.Log($"Intersección creada: {intersection.name} en posición {intersection.position}");
-                    }
-                    else
-                    {
-                        Debug.Log($"Intersección duplicada en posición {intersection.position}, usando nodo existente");
-                    }
-                }
-            }
-            Debug.Log($"Procesadas {intersectionNodes.Count} intersecciones");
-        }
-        else
-        {
-            Debug.Log("No se encontró la carpeta 'Intersections'");
-        }
-        
-        // ========== PROCESAR CARRETERAS ==========
-        Dictionary<string, List<GraphNode>> roadNodes = new Dictionary<string, List<GraphNode>>();
-        
-        // Buscar todos los hijos que empiezan con "Road" directamente bajo RoadArchitectSystem
-        List<Transform> roads = new List<Transform>();
-        foreach (Transform child in roadArchitectSystem)
-        {
-            if (child.name.StartsWith("Road"))
-            {
-                roads.Add(child);
-            }
-        }
-        
-        Debug.Log($"Encontradas {roads.Count} carreteras directamente bajo RoadArchitectSystem");
-        
-        // Procesar cada carretera
-        foreach (Transform road in roads)
-        {
-            Debug.Log($"Procesando carretera: {road.name}");
-            
-            // Buscar la carpeta Spline dentro de esta carretera
-            Transform spline = road.Find("Spline");
-            if (spline == null)
-            {
-                Debug.LogWarning($"No se encontró la carpeta 'Spline' en {road.name}");
-                continue;
-            }
-            
-            Debug.Log($"Spline encontrado en {road.name} con {spline.childCount} hijos");
-            
-            // Recoger todos los nodos dentro de Spline que comienzan con "Node"
-            List<Transform> nodes = new List<Transform>();
-            foreach (Transform child in spline)
-            {
-                // Solo tomar los objetos que son nodos directos (no hijos de nodos)
-                if (child.name.StartsWith("Node") && child.parent == spline)
-                {
-                    nodes.Add(child);
-                }
-            }
-            
-            // Ordenar los nodos por nombre
-            nodes = nodes.OrderBy(n => n.name).ToList();
-            
-            if (nodes.Count == 0)
-            {
-                Debug.LogWarning($"No se encontraron nodos en la spline de {road.name}");
-                continue;
-            }
-            
-            Debug.Log($"Encontrados {nodes.Count} nodos en {road.name}");
-            
-            // Crear nodos en el grafo y conectarlos
-            List<GraphNode> currentRoadNodes = new List<GraphNode>();
-            GraphNode previousNode = null;
-            
-            foreach (Transform node in nodes)
-            {
-                Vector3Int roundedPos = RoundPosition(node.position, 0.5f);
-                GraphNode graphNode;
-                
-                // Verificar si ya existe un nodo en esta posición
-                if (positionToNode.TryGetValue(roundedPos, out GraphNode existingNode))
-                {
-                    graphNode = existingNode;
-                    Debug.Log($"Reutilizando nodo existente en posición {node.position} para {road.name}/{node.name}");
-                }
-                else
-                {
-                    // Crear nuevo nodo
-                    graphNode = roadGraph.AddNode(node.position, node.name, road.name);
-                    positionToNode[roundedPos] = graphNode;
-                    
-                    // Verificar si está cerca de una intersección existente
-                    foreach (var intersectionNode in intersectionNodes)
-                    {
-                        float distance = Vector3.Distance(graphNode.position, intersectionNode.position);
-                        if (distance < 2f) // Umbral para considerar que es la misma intersección
-                        {
-                            Debug.Log($"Nodo {node.name} está cerca de intersección {intersectionNode.originalName} (distancia: {distance})");
-                            graphNode.isIntersection = true;
-                            graphNode.nodeType = "intersection";
-                            break;
-                        }
-                    }
-                }
-                
-                // Actualizar información del nodo
-                if (string.IsNullOrEmpty(graphNode.originalName))
-                    graphNode.originalName = node.name;
-                if (string.IsNullOrEmpty(graphNode.roadName))
-                    graphNode.roadName = road.name;
-                
-                // IMPORTANTE: Asignar nombre especial si este nodo está en nuestro diccionario
-                string nodeFullName = $"{node.name}({road.name})";
-                if (specialNodeNames.ContainsKey(nodeFullName))
-                {
-                    graphNode.specialName = specialNodeNames[nodeFullName];
-                    Debug.Log($"¡NODO ESPECIAL ASIGNADO! {nodeFullName} -> {graphNode.specialName}");
-                }
-                
-                currentRoadNodes.Add(graphNode);
-                
-                // Crear indicador visual
-                if (graphNode.isIntersection)
-                {
-                    CreateVisualIndicator(graphNode.position, intersectionIndicatorPrefab);
-                }
-                else
-                {
-                    CreateVisualIndicator(graphNode.position, nodeIndicatorPrefab);
-                }
-                
-                // Conectar con el nodo anterior en la misma carretera
-                if (previousNode != null && previousNode != graphNode)
-                {
-                    float distance = Vector3.Distance(previousNode.position, graphNode.position);
-                    
-                    // Verificar si la conexión ya existe antes de crearla
-                    bool connectionExists = roadGraph.edges.Any(e => 
-                        (e.startNodeId == previousNode.id && e.endNodeId == graphNode.id) ||
-                        (e.startNodeId == graphNode.id && e.endNodeId == previousNode.id));
-                    
-                    if (!connectionExists)
-                    {
-                        GraphEdge edge1 = roadGraph.ConnectNodes(previousNode, graphNode, distance);
-                        GraphEdge edge2 = roadGraph.ConnectNodes(graphNode, previousNode, distance);
-                        
-                        if (edge1 != null && edge2 != null)
-                        {
-                            Debug.Log($"Conectados {previousNode.originalName} ↔ {graphNode.originalName} (distancia: {distance})");
-                        }
-                    }
-                }
-                
-                previousNode = graphNode;
-            }
-            
-            roadNodes[road.name] = currentRoadNodes;
-        }
-        
-        // ========== CONECTAR INTERSECCIONES CON CARRETERAS ==========
-        int intersectionConnections = 0;
-        foreach (var intersectionNode in intersectionNodes)
-        {
-            // Buscar nodos cercanos a esta intersección
-            foreach (var roadNode in roadGraph.nodes)
-            {
-                if (roadNode == intersectionNode) continue;
-                
-                float distance = Vector3.Distance(intersectionNode.position, roadNode.position);
-                
-                // Conectar si están suficientemente cerca
-                if (distance < 10f)
-                {
-                    bool alreadyConnected = roadGraph.edges.Any(e => 
-                        (e.startNodeId == intersectionNode.id && e.endNodeId == roadNode.id) ||
-                        (e.startNodeId == roadNode.id && e.endNodeId == intersectionNode.id));
-                    
-                    if (!alreadyConnected)
-                    {
-                        roadGraph.ConnectNodes(intersectionNode, roadNode, distance);
-                        roadGraph.ConnectNodes(roadNode, intersectionNode, distance);
-                        intersectionConnections++;
-                        
-                        Debug.Log($"Conectada intersección {intersectionNode.originalName} ↔ {roadNode.originalName} (distancia: {distance})");
-                    }
-                }
-            }
-        }
-        
-        // ========== CONEXIONES FINALES ==========
+
+        // Construir grafo
+        StartCoroutine(BuildGraphFromRoadArchitectCoroutine(roadArchitect));
+
+        // Espera un frame para que Unity pueda renderizar
+        yield return null;
+
+        // Subdividir aristas largas gradualmente
+        yield return StartCoroutine(SubdivideLongEdgesCoroutine(20f));
+
+        // Limpiar aristas inválidas y reconstruir conexiones
         roadGraph.CleanInvalidEdges();
         roadGraph.RebuildAllConnections();
-        
-        // Verificar consistencia
-        int isolatedNodes = 0;
-        foreach (var node in roadGraph.nodes)
+
+        // Mostrar nodos especiales
+        ShowSpecialNodesInfo();
+
+        Debug.Log($"Grafo inicializado: {roadGraph.nodes.Count} nodos, {roadGraph.edges.Count} aristas válidas");
+    }
+    
+    public IEnumerator BuildGraphFromRoadArchitectCoroutine(GameObject roadArchitectContainer)
+{
+    roadGraph = new RoadGraph();
+    ClearVisualIndicators();
+
+    if (roadArchitectContainer == null)
+    {
+        Debug.LogError("El contenedor de Road Architect es nulo");
+        yield break;
+    }
+
+    Debug.Log($"Construyendo grafo desde: {roadArchitectContainer.name} (Ruta: {GetFullPath(roadArchitectContainer.transform)})");
+
+    Transform roadArchitectSystem = roadArchitectContainer.transform;
+    Dictionary<Vector3Int, GraphNode> positionToNode = new Dictionary<Vector3Int, GraphNode>();
+
+    Vector3Int RoundPosition(Vector3 pos, float precision = 0.5f)
+    {
+        return new Vector3Int(
+            Mathf.RoundToInt(pos.x / precision),
+            Mathf.RoundToInt(pos.y / precision),
+            Mathf.RoundToInt(pos.z / precision)
+        );
+    }
+
+    // --- Procesar intersecciones ---
+    Transform intersectionsFolder = roadArchitectSystem.Find("Intersections");
+    List<GraphNode> intersectionNodes = new List<GraphNode>();
+    if (intersectionsFolder != null)
+    {
+        foreach (Transform intersection in intersectionsFolder)
         {
-            if (node.edges.Count == 0)
+            if (!intersection.name.StartsWith("Inter")) continue;
+
+            Vector3Int roundedPos = RoundPosition(intersection.position, 1f);
+
+            if (!positionToNode.ContainsKey(roundedPos))
             {
-                isolatedNodes++;
-                Debug.LogWarning($"Nodo aislado: {node.id} ({node.originalName}) en posición {node.position}");
+                GraphNode intersectionNode = roadGraph.AddNode(intersection.position, intersection.name, "Intersection");
+                intersectionNode.isIntersection = true;
+                intersectionNode.nodeType = "intersection";
+
+                if (specialNodeNames.ContainsKey(intersection.name))
+                {
+                    intersectionNode.specialName = specialNodeNames[intersection.name];
+                    intersectionNode.displayName = specialNodeNames[intersection.name];
+                }
+
+                intersectionNodes.Add(intersectionNode);
+                positionToNode[roundedPos] = intersectionNode;
+
+                CreateVisualIndicator(intersectionNode.position, intersectionIndicatorPrefab);
             }
         }
-        
-        // Mostrar información de nodos especiales
-        ShowSpecialNodesInfo();
-        
-        // ========== RESUMEN ==========
-        Debug.Log("=== RESUMEN DE CONSTRUCCIÓN DEL GRAFO ===");
-        Debug.Log($"Carreteras procesadas: {roads.Count}");
-        Debug.Log($"Intersecciones procesadas: {intersectionNodes.Count}");
-        Debug.Log($"Nodos totales: {roadGraph.nodes.Count}");
-        Debug.Log($"Nodos de intersección: {roadGraph.nodes.Count(n => n.isIntersection)}");
-        Debug.Log($"Aristas válidas: {roadGraph.edges.Count}");
-        Debug.Log($"Conexiones de intersecciones: {intersectionConnections}");
-        Debug.Log($"Nodos aislados: {isolatedNodes}");
-        
-        if (isolatedNodes > 0)
+    }
+
+    // --- Procesar carreteras ---
+    List<Transform> roads = new List<Transform>();
+    foreach (Transform child in roadArchitectSystem)
+        if (child.name.StartsWith("Road")) roads.Add(child);
+
+    foreach (Transform road in roads)
+    {
+        Transform spline = road.Find("Spline");
+        if (spline == null) continue;
+
+        List<Transform> nodes = new List<Transform>();
+        foreach (Transform child in spline)
+            if (child.name.StartsWith("Node") && child.parent == spline)
+                nodes.Add(child);
+
+        if (nodes.Count == 0) continue;
+
+        GraphNode previousNode = null;
+
+        foreach (Transform node in nodes)
         {
-            Debug.LogWarning($"Hay {isolatedNodes} nodos aislados. Considera verificar las distancias de conexión.");
+            Vector3Int roundedPos = RoundPosition(node.position, 0.5f);
+            GraphNode graphNode;
+            if (!positionToNode.TryGetValue(roundedPos, out graphNode))
+            {
+                graphNode = roadGraph.AddNode(node.position, node.name, road.name);
+                positionToNode[roundedPos] = graphNode;
+
+                foreach (var interNode in intersectionNodes)
+                {
+                    float dist = Vector3.Distance(graphNode.position, interNode.position);
+                    if (dist < 10f)
+                    {
+                        roadGraph.ConnectNodes(graphNode, interNode, dist);
+                        roadGraph.ConnectNodes(interNode, graphNode, dist);
+                        graphNode.isIntersection = true;
+                        graphNode.nodeType = "intersection";
+                    }
+                }
+            }
+
+            string nodeFullName = $"{node.name}({road.name})";
+            if (specialNodeNames.ContainsKey(nodeFullName))
+            {
+                graphNode.specialName = specialNodeNames[nodeFullName];
+                graphNode.displayName = specialNodeNames[nodeFullName];
+            }
+
+            CreateVisualIndicator(graphNode.position, graphNode.isIntersection ? intersectionIndicatorPrefab : nodeIndicatorPrefab);
+
+            if (previousNode != null)
+            {
+                float dist = Vector3.Distance(previousNode.position, graphNode.position);
+                roadGraph.ConnectNodes(previousNode, graphNode, dist);
+                roadGraph.ConnectNodes(graphNode, previousNode, dist);
+            }
+
+            previousNode = graphNode;
+
+            yield return null; // pausa un frame cada nodo para evitar freeze
         }
     }
+
+    // --- Conexiones automáticas ---
+    float autoConnectDistance = 20f;
+    int processed = 0;
+    foreach (var nodeA in roadGraph.nodes)
+    {
+        foreach (var nodeB in roadGraph.nodes)
+        {
+            if (nodeA == nodeB) continue;
+            if (Vector3.Distance(nodeA.position, nodeB.position) > autoConnectDistance) continue;
+
+            if (!nodeA.edges.Any(e => e.endNodeId == nodeB.id))
+            {
+                roadGraph.ConnectNodes(nodeA, nodeB, Vector3.Distance(nodeA.position, nodeB.position));
+                roadGraph.ConnectNodes(nodeB, nodeA, Vector3.Distance(nodeA.position, nodeB.position));
+            }
+        }
+
+        processed++;
+        if (processed % 50 == 0)
+            yield return null; // pausa cada 50 nodos
+    }
+
+    roadGraph.CleanInvalidEdges();
+    roadGraph.RebuildAllConnections();
+
+    // --- Nodos aislados ---
+    foreach (var node in roadGraph.nodes)
+    {
+        if (node.edges.Count == 0)
+        {
+            GraphNode closest = roadGraph.nodes
+                .Where(n => n != node)
+                .OrderBy(n => Vector3.Distance(n.position, node.position))
+                .FirstOrDefault();
+
+            if (closest != null)
+            {
+                float dist = Vector3.Distance(node.position, closest.position);
+                roadGraph.ConnectNodes(node, closest, dist);
+                roadGraph.ConnectNodes(closest, node, dist);
+            }
+        }
+    }
+
+    ShowSpecialNodesInfo();
+    DebugGraphInfo();
+    Debug.Log($"Grafo construido. Nodos: {roadGraph.nodes.Count}, Aristas: {roadGraph.edges.Count}");
+}
     
     // Método para mostrar información de nodos especiales
     void ShowSpecialNodesInfo()
@@ -517,6 +412,50 @@ public class RoadGraphSystem : MonoBehaviour
         
         return null;
     }
+    public void StartSubdivideLongEdges(float maxSegmentLength = 5f)
+    {
+        StartCoroutine(SubdivideLongEdgesCoroutine(maxSegmentLength));
+    }
+
+    // Subdivide aristas largas en nodos intermedios
+    public IEnumerator SubdivideLongEdgesCoroutine(float maxSegmentLength = 5f)
+    {
+        List<(GraphNode start, GraphNode end)> edgesToSplit = new List<(GraphNode, GraphNode)>();
+
+        foreach (var edge in roadGraph.edges)
+        {
+            if (edge.startNode == null || edge.endNode == null) continue;
+            if (Vector3.Distance(edge.startNode.position, edge.endNode.position) > maxSegmentLength)
+                edgesToSplit.Add((edge.startNode, edge.endNode));
+        }
+
+        foreach (var (start, end) in edgesToSplit)
+        {
+            float safeSegmentLength = Mathf.Min(maxSegmentLength, 10f);
+            int segments = Mathf.CeilToInt(Vector3.Distance(start.position, end.position) / safeSegmentLength);
+            if (segments <= 1) continue;
+
+            roadGraph.RemoveEdge(start, end);
+
+            GraphNode prevNode = start;
+
+            for (int i = 1; i <= segments; i++)
+            {
+                float t = (float)i / segments;
+                Vector3 newPos = Vector3.Lerp(start.position, end.position, t);
+                GraphNode newNode = roadGraph.AddNode(newPos, $"SubNode_{start.id}_{end.id}_{i}", start.roadName);
+
+                roadGraph.ConnectNodes(prevNode, newNode, Vector3.Distance(prevNode.position, newNode.position));
+                prevNode = newNode;
+
+                if (i % 5 == 0) // espera un frame cada 5 nodos
+                    yield return null;
+            }
+        }
+
+        roadGraph.RebuildAllConnections();
+        Debug.Log("Subdivisión de aristas largas completada.");
+    }
     
     private string GetFullPath(Transform tr)
     {
@@ -547,9 +486,7 @@ public class RoadGraphSystem : MonoBehaviour
     void OnDrawGizmos()
     {
         if (!visualizeGraph || roadGraph == null) return;
-        
-        roadGraph.RebuildAllConnections();
-        
+
         foreach (GraphNode node in roadGraph.nodes)
         {
             // Nodos con nombre especial en AMARILLO
@@ -557,49 +494,61 @@ public class RoadGraphSystem : MonoBehaviour
             {
                 Gizmos.color = Color.yellow;
                 Gizmos.DrawSphere(node.position, node.isIntersection ? 0.8f : 0.6f);
-                
-                #if UNITY_EDITOR
+
+    #if UNITY_EDITOR
                 // Mostrar el nombre especial
-                UnityEditor.Handles.Label(node.position + Vector3.up * 1.5f, 
-                    $"<color=yellow>{node.specialName}</color>\n<color=white>{node.originalName}</color>");
-                #endif
+                UnityEditor.Handles.Label(
+                    node.position + Vector3.up * 1.5f,
+                    $"<color=yellow>{node.specialName}</color>\n<color=white>{node.originalName}</color>"
+                );
+    #endif
             }
             // Intersecciones en ROJO
             else if (node.isIntersection)
             {
                 Gizmos.color = Color.red;
                 Gizmos.DrawSphere(node.position, 0.7f);
-                
-                #if UNITY_EDITOR
-                UnityEditor.Handles.Label(node.position + Vector3.up, 
-                    $"<color=red>{node.originalName}</color>\n({node.roadName})");
-                #endif
+
+    #if UNITY_EDITOR
+                UnityEditor.Handles.Label(
+                    node.position + Vector3.up,
+                    $"<color=red>{node.originalName}</color>\n({node.roadName})"
+                );
+    #endif
             }
             // Nodos normales en AZUL
             else
             {
                 Gizmos.color = Color.blue;
                 Gizmos.DrawSphere(node.position, 0.5f);
-                
-                #if UNITY_EDITOR
-                UnityEditor.Handles.Label(node.position + Vector3.up, 
-                    $"{node.originalName}\n({node.roadName})");
-                #endif
+
+    #if UNITY_EDITOR
+                UnityEditor.Handles.Label(
+                    node.position + Vector3.up,
+                    $"{node.originalName}\n({node.roadName})"
+                );
+    #endif
             }
         }
-        
+
+        // Dibujar aristas en VERDE
         Gizmos.color = Color.green;
         foreach (GraphEdge edge in roadGraph.edges)
         {
             if (edge.startNode == null || edge.endNode == null)
+            {
+                // Intentar reconstruir conexiones si están rotas
                 edge.RebuildConnections(roadGraph);
-                
+                if (edge.startNode == null || edge.endNode == null) continue;
+            }
+
             Gizmos.DrawLine(edge.startNode.position, edge.endNode.position);
-            
+
+            // Flecha de dirección
             Vector3 direction = (edge.endNode.position - edge.startNode.position).normalized;
             Vector3 perpendicular = Vector3.Cross(direction, Vector3.up).normalized * 0.3f;
             Vector3 arrowStart = edge.startNode.position + (edge.endNode.position - edge.startNode.position) * 0.7f;
-            
+
             Gizmos.DrawLine(arrowStart, arrowStart + direction * 1f - perpendicular * 0.5f);
             Gizmos.DrawLine(arrowStart, arrowStart + direction * 1f + perpendicular * 0.5f);
         }
