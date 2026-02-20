@@ -100,6 +100,12 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
         type: 3}
+      propertyPath: m_Icon
+      value: 
+      objectReference: {fileID: 7250588514170254948, guid: 0000000000000000d000000000000000,
+        type: 0}
+    - target: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
+        type: 3}
       propertyPath: m_Name
       value: NPCVehicle
       objectReference: {fileID: 0}
@@ -183,6 +189,8 @@ MonoBehaviour:
     nodeType: 
     originalName: 
     roadName: 
+    displayName: 
+    specialName: 
   targetNode:
     id: 0
     position: {x: 0, y: 0, z: 0}
@@ -190,11 +198,21 @@ MonoBehaviour:
     nodeType: 
     originalName: 
     roadName: 
+    displayName: 
+    specialName: 
   speed: 10
   rotationSpeed: 2
   minDistanceToNode: 2
-  baseSpeed: 0
-  baseRotationSpeed: 0
+  waitTimeAtIntersection: 3
+  showPath: 1
+  pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  currentPath: []
+  currentPathIndex: 0
+  currentTargetPosition: {x: 0, y: 0, z: 0}
+  isWaitingAtIntersection: 0
+  intersectionWaitTimer: 0
+  isInitialized: 0
+  rb: {fileID: 0}
   currentNode:
     id: 0
     position: {x: 0, y: 0, z: 0}
@@ -202,6 +220,8 @@ MonoBehaviour:
     nodeType: 
     originalName: 
     roadName: 
+    displayName: 
+    specialName: 
   currentEdge:
     startNodeId: 0
     endNodeId: 0

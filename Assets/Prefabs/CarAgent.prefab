@@ -505,7 +505,7 @@ GameObject:
   m_Layer: 6
   m_Name: CarAgent
   m_TagString: Player
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 5721338939258241955, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -604,25 +604,18 @@ MonoBehaviour:
   motorForce: 1500
   steeringAngle: 25
   resetPosition: {fileID: 0}
-  raycastDistance: 5
   roadLayer:
+    serializedVersion: 2
+    m_Bits: 0
+  obstacleLayer:
     serializedVersion: 2
     m_Bits: 0
   rayCount: 5
   raySpreadAngle: 45
-  roadGraphSystem: {fileID: 0}
-  pathRecalculationInterval: 5
-  nodeReachedDistance: 3
   rainSpeedAdaptationRate: 0.1
   rainSteeringAdaptationRate: 0.05
-  currentEdge:
-    startNodeId: 0
-    endNodeId: 0
-    baseCost: 0
-    trafficCost: 0
-    laneCount: 0
-    speedLimit: 0
-    roadType: 
+  driverDataFile: {fileID: 0}
+  initialLocation: La Guaira
 --- !u!114 &2066522969920626610
 MonoBehaviour:
   m_ObjectHideFlags: 0
