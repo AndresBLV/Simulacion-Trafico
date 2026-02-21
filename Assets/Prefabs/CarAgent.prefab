@@ -600,22 +600,26 @@ MonoBehaviour:
   agentParameters:
     maxStep: 0
   hasUpgradedFromAgentParameters: 1
-  MaxStep: 0
+  MaxStep: 10000
   motorForce: 1500
   steeringAngle: 25
   resetPosition: {fileID: 0}
   roadLayer:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 512
   obstacleLayer:
     serializedVersion: 2
-    m_Bits: 0
-  rayCount: 5
-  raySpreadAngle: 45
+    m_Bits: 448
+  rayCount: 10
+  raySpreadAngle: 75
   rainSpeedAdaptationRate: 0.1
   rainSteeringAdaptationRate: 0.05
-  driverDataFile: {fileID: 0}
-  initialLocation: La Guaira
+  driverDataFile: {fileID: 4900000, guid: 603d921ee532d3b48a6b739ae84e99e6, type: 3}
+  initialLocation: La Urbina
+  peopleCounterText: {fileID: 0}
+  isWaitingAtIntersection: 0
+  intersectionWaitTimer: 0
+  waitTimeAtIntersection: 3
 --- !u!114 &2066522969920626610
 MonoBehaviour:
   m_ObjectHideFlags: 0
