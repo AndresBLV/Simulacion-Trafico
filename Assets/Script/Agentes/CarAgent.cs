@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using TMPro;
 using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
@@ -36,6 +37,15 @@ public class CarAgent : Agent
 
     private float baseMotorForce;
     private float baseSteeringAngle;
+
+    public TMP_Text peopleCounterText;
+    private int totalPeoplePassed = 0;
+    private bool countedThisEpisode = false;
+
+    public bool isWaitingAtIntersection = false;
+    public float intersectionWaitTimer = 0f;
+
+    public float waitTimeAtIntersection = 3f;
 
     private DriverProfile currentDriverProfile;
     private List<DriverProfile> driverProfiles;
@@ -285,7 +295,17 @@ public class CarAgent : Agent
     }
 
     private void FixedUpdate()
-    {
+    {   
+        if (isWaitingAtIntersection)
+        {
+            intersectionWaitTimer += Time.deltaTime;
+
+            if (intersectionWaitTimer >= waitTimeAtIntersection)
+            {
+                isWaitingAtIntersection = false;
+                AddReward(1f); // recompensa por esperar correctamente
+            }
+        }
         RewardDriving();
         UpdateWeatherAdaptation();
 
@@ -307,6 +327,24 @@ public class CarAgent : Agent
 
     private void OnTriggerEnter(Collider other)
     {
+        if (other.CompareTag("PassengerCounterZone") && !countedThisEpisode)
+        {
+            countedThisEpisode = true;
+
+            if (currentDriverProfile != null)
+            {
+                totalPeoplePassed += currentDriverProfile.peopleCount;
+                UpdatePeopleUI();
+                AddReward(0.1f * currentDriverProfile.peopleCount);
+            }
+        }
+        if (other.CompareTag("TrafficLight"))
+        {
+            Debug.Log($"NPCAgent {gameObject.name} - Encontró semáforo. Esperando...");
+            isWaitingAtIntersection = true;
+            intersectionWaitTimer = 0f;
+            waitTimeAtIntersection = Random.Range(2f, 5f);
+        }
         if (other.CompareTag("Boundary"))
         {
             AddReward(-2f);
@@ -320,6 +358,14 @@ public class CarAgent : Agent
         }
     }
 
+    private void UpdatePeopleUI()
+    {
+        if (peopleCounterText != null)
+        {
+            peopleCounterText.text = "Personas transportadas: " + totalPeoplePassed;
+        }
+    }
+
     private void ResetCar()
     {
         transform.position = resetPosition.position;
@@ -327,6 +373,9 @@ public class CarAgent : Agent
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         hasFinished = false;
+        countedThisEpisode = false;
+        totalPeoplePassed = 0;
+        UpdatePeopleUI();
 
         foreach (var wheel in wheels) { wheel.motorTorque = 0f; wheel.steerAngle = 0f; wheel.brakeTorque = 0f; }
     }
