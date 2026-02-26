@@ -19,19 +19,29 @@ public class RoadGraph
     
     public GraphEdge ConnectNodes(GraphNode start, GraphNode end, float cost = 1f)
     {
-        // Verificar si la conexión ya existe
+        // 🔒 REGLA DE CONECTIVIDAD
+        bool sameRoad = start.roadName == end.roadName;
+
+        bool startIsIntersection = start.roadName == "Intersection";
+        bool endIsIntersection = end.roadName == "Intersection";
+
+        // ❌ Bloquear conexiones inválidas
+        if (!sameRoad && !startIsIntersection && !endIsIntersection)
+        {
+            return null;
+        }
+
+        // Verificar si ya existe
         if (edges.Any(e => e.startNodeId == start.id && e.endNodeId == end.id))
             return edges.First(e => e.startNodeId == start.id && e.endNodeId == end.id);
-            
+
         GraphEdge newEdge = new GraphEdge(start.id, end.id, cost);
         edges.Add(newEdge);
-        
-        // Reconstruir conexiones inmediatamente
+
         newEdge.RebuildConnections(this);
-        
+
         return newEdge;
     }
-    
     public GraphNode GetNodeById(int id)
     {
         return nodes.FirstOrDefault(n => n.id == id);

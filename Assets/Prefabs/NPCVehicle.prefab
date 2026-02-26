@@ -204,7 +204,7 @@ MonoBehaviour:
   rotationSpeed: 2
   minDistanceToNode: 2
   waitTimeAtIntersection: 3
-  showPath: 1
+  showPath: 0
   pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   currentPath: []
   currentPathIndex: 0

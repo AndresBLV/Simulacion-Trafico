@@ -28,6 +28,14 @@ public class TrafficManager : MonoBehaviour
     
     // Listas de nodos
     private List<GraphNode> spawnNodes = new List<GraphNode>();
+    [System.Serializable]
+    public class WeightedSpawn
+    {
+        public GraphNode node;
+        public float weight;
+    }
+
+    private List<WeightedSpawn> weightedSpawns = new List<WeightedSpawn>();
     private List<GraphNode> targetNodes = new List<GraphNode>();
     
     private List<NPCAgent> activeNPCs = new List<NPCAgent>();
@@ -35,106 +43,97 @@ public class TrafficManager : MonoBehaviour
     private float trafficUpdateTimer = 0f;
     private bool isInitialized = false;
     
-    void Start()
+    IEnumerator Start()
     {
-        Debug.Log("TrafficManager.Start() - Inicializando...");
-        
-        // Asegurar que este GameObject esté activo
-        gameObject.SetActive(true);
-        this.enabled = true;
-        
-        // Buscar RoadGraphSystem si no está asignado
+        Debug.Log("TrafficManager - Esperando inicialización del grafo...");
+
+        if (roadGraphSystem == null)
+            roadGraphSystem = FindFirstObjectByType<RoadGraphSystem>();
+
         if (roadGraphSystem == null)
         {
-            roadGraphSystem = FindFirstObjectByType<RoadGraphSystem>();
-            if (roadGraphSystem == null)
-            {
-                Debug.LogError("TrafficManager: No se encontró RoadGraphSystem!");
-                return;
-            }
-            Debug.Log($"TrafficManager: RoadGraphSystem encontrado: {roadGraphSystem.name}");
+            Debug.LogError("No se encontró RoadGraphSystem");
+            yield break;
         }
-        
-        // Buscar jugador
-        if (playerTransform == null)
+
+        // Si el grafo aún no está listo, construirlo
+        if (!roadGraphSystem.graphReady)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-            {
-                playerTransform = player.transform;
-                Debug.Log($"TrafficManager: Jugador encontrado: {playerTransform.name}");
-            }
-        }
-        
-        // Verificar prefab
-        if (npcVehiclePrefab == null)
-        {
-            Debug.LogError("TrafficManager: ¡No hay prefab de NPC asignado!");
-            CreateEmergencyPrefab();
-        }
-        else
-        {
-            Debug.Log($"TrafficManager: Prefab NPC asignado: {npcVehiclePrefab.name}");
-            
-            // Verificar componente NPCAgent en el prefab
-            if (npcVehiclePrefab.GetComponent<NPCAgent>() == null)
-            {
-                Debug.LogError("TrafficManager: El prefab no tiene componente NPCAgent!");
-                CreateEmergencyPrefab();
-            }
-        }
-        
-        // Construir grafo si es necesario
-        if (roadGraphSystem.roadGraph == null || roadGraphSystem.roadGraph.nodes.Count == 0)
-        {
-            Debug.LogWarning("TrafficManager: Construyendo grafo...");
             roadGraphSystem.BuildGraphAutomatically();
-            
-            if (roadGraphSystem.roadGraph == null || roadGraphSystem.roadGraph.nodes.Count == 0)
-            {
-                Debug.LogError("TrafficManager: No se pudo construir el grafo!");
-                return;
-            }
         }
-        
-        // Reconstruir conexiones
+
+        // 🔴 ESPERAR HASTA QUE EL GRAFO ESTÉ LISTO
+        while (!roadGraphSystem.graphReady)
+        {
+            yield return null;
+        }
+
+        Debug.Log("TrafficManager - Grafo listo.");
+
         roadGraphSystem.roadGraph.RebuildAllConnections();
-        Debug.Log($"TrafficManager: Grafo listo con {roadGraphSystem.roadGraph.nodes.Count} nodos");
-        
-        // Obtener nodos por nombres especiales
+
         GetNodesBySpecialNames();
-        
-        // Si no se encontraron nodos, intentar métodos alternativos
+
+        ConfigureSpawnWeights();
+
         if (spawnNodes.Count == 0)
         {
-            Debug.LogWarning("TrafficManager: No se encontraron nodos de spawn por nombres especiales. Buscando alternativas...");
-            FindSpawnNodesAlternative();
+            Debug.LogError("❌ No se encontraron nodos de spawn.");
+            yield break;
         }
-        
+
         if (targetNodes.Count == 0)
         {
-            Debug.LogWarning("TrafficManager: No se encontraron nodos destino por nombres especiales. Buscando alternativas...");
-            FindTargetNodesAlternative();
+            Debug.LogError("❌ No se encontraron nodos destino.");
+            yield break;
         }
-        
-        // Verificar que tenemos nodos
-        if (spawnNodes.Count == 0)
-        {
-            Debug.LogError("TrafficManager: ¡No se encontraron nodos de spawn!");
-            return;
-        }
-        
-        if (targetNodes.Count == 0)
-        {
-            Debug.LogError("TrafficManager: ¡No se encontraron nodos destino!");
-            return;
-        }
-        
+
         isInitialized = true;
-        Debug.Log($"TrafficManager: Inicializado correctamente. Nodos spawn: {spawnNodes.Count}, Destinos: {targetNodes.Count}");
-        
-        // Spawn inicial
+
+        Debug.Log($"TrafficManager inicializado correctamente. Spawn: {spawnNodes.Count} Destino: {targetNodes.Count}");
+
         StartCoroutine(InitialSpawn());
+    }
+
+    void ConfigureSpawnWeights()
+    {
+        weightedSpawns.Clear();
+
+        foreach (var node in spawnNodes)
+        {
+            float weight = 1f;
+
+            // 🔥 MÁS TRÁFICO EN ROAD3
+            if (node.specialName.Contains("Road3"))
+            {
+                weight = 0.5f; // puedes cambiar a 2f si quieres menos
+            }
+
+            weightedSpawns.Add(new WeightedSpawn
+            {
+                node = node,
+                weight = weight
+            });
+
+            Debug.Log($"Spawn configurado: {node.specialName} - Peso: {weight}");
+        }
+    }
+
+    GraphNode GetWeightedRandomSpawn()
+    {
+        float totalWeight = weightedSpawns.Sum(s => s.weight);
+        float randomPoint = Random.Range(0f, totalWeight);
+
+        float cumulative = 0f;
+
+        foreach (var spawn in weightedSpawns)
+        {
+            cumulative += spawn.weight;
+            if (randomPoint <= cumulative)
+                return spawn.node;
+        }
+
+        return weightedSpawns[0].node; // fallback
     }
     
     IEnumerator InitialSpawn()
@@ -394,8 +393,14 @@ public class TrafficManager : MonoBehaviour
         roadGraphSystem.roadGraph.RebuildAllConnections();
         
         // Seleccionar nodo de spawn aleatorio
-        GraphNode spawnNode = spawnNodes[Random.Range(0, spawnNodes.Count)];
-        GraphNode targetNode = targetNodes[Random.Range(0, targetNodes.Count)];
+        GraphNode spawnNode = GetWeightedRandomSpawn();
+        GraphNode targetNode = GetValidConnectedTarget(spawnNode);
+
+        if (targetNode == null)
+        {
+            Debug.LogWarning("No hay destino válido para este spawn. Cancelando spawn.");
+            return;
+        }
 
         // 🔹 CAMBIO: Asegurar que spawnNode y targetNode estén conectados
         spawnNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(spawnNode) ?? spawnNode;
@@ -460,6 +465,22 @@ public class TrafficManager : MonoBehaviour
             Destroy(npcObj);
         }
     }
+
+    GraphNode GetValidConnectedTarget(GraphNode spawnNode)
+    {
+        foreach (var candidate in targetNodes.OrderBy(x => Random.value))
+        {
+            var path = roadGraphSystem.roadGraph.FindPath(spawnNode, candidate);
+            if (path != null && path.Count > 0)
+            {
+                return candidate;
+            }
+        }
+
+        Debug.LogWarning($"No se encontró destino conectado para {spawnNode.originalName}");
+        return null;
+    }
+
     
    IEnumerator InitializeNPCDelayed(NPCAgent agent)
     {
