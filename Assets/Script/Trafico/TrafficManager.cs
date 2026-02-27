@@ -485,7 +485,7 @@ public class TrafficManager : MonoBehaviour
         if (agent == null) yield break;
 
         // 🔹 CAMBIO: Asegurar conexiones antes de calcular ruta
-        roadGraphSystem.roadGraph.RebuildAllConnections();
+
 
         agent.CalculatePathToTarget();
 

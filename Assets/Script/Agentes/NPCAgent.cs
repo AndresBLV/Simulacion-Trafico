@@ -154,17 +154,20 @@ public class NPCAgent : MonoBehaviour
 
         Vector3 direction = (currentTargetPosition - transform.position).normalized;
 
-        // Rotación suave
+        // Rotación suave con Rigidbody
         if (direction != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(direction);
             rb.MoveRotation(Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
         }
 
-        // Movimiento con Rigidbody
-        Vector3 velocity = direction * speed;
-        velocity.y = rb.linearVelocity.y; // Mantener velocidad vertical natural
-        rb.linearVelocity = velocity;
+        // Movimiento físico usando MovePosition
+        Vector3 nextPosition = transform.position + direction * speed * Time.fixedDeltaTime;
+
+        // Mantener la altura natural usando el Rigidbody
+        nextPosition.y = transform.position.y;
+
+        rb.MovePosition(nextPosition);
     }
 
     private void ReachNextNode()
