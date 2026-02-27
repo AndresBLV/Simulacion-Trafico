@@ -22,15 +22,15 @@ public class RoadGraphSystem : MonoBehaviour
         { "Inter3", "Acceso Distribuidor Metropolitano (Autopista)" },
 
         // ===== SPAWN OFICIALES =====
-        { "Node22(Road3)", "Spawn_Road3_Node22" },
+        // { "Node8(Road8)", "Spawn_Road3_Node22" },
         { "Node1(Road1)", "Spawn_Road1_Node1" },
-        { "Node1(Road2)", "Spawn_Road2_Node1" },
-        { "Node1(Road5)", "Spawn_Road5_Node1" },
+        // { "Node1(Road2)", "Spawn_Road2_Node1" },
+        // { "Node1(Road5)", "Spawn_Road5_Node1" },
 
         // ===== DESTINOS (si los necesitas) =====
         { "Node29(Road1)", "Destino_Road1_Node29" },
-        { "Node21(Road5)", "Destino_Road5_Node21" },
-        { "Node21(Road3)", "Destino_Road3_Node21" }
+        // { "Node21(Road5)", "Destino_Road5_Node21" },
+        // { "Node21(Road3)", "Destino_Road3_Node21" }
     };
     
     // Método público para obtener nodos por nombre especial
@@ -243,6 +243,8 @@ public class RoadGraphSystem : MonoBehaviour
 
             List<Transform> splineNodes = new List<Transform>();
 
+            List<GraphNode> createdRoadNodes = new List<GraphNode>();
+
             foreach (Transform child in spline)
             {
                 if (child.name.StartsWith("Node") && child.parent == spline)
@@ -270,6 +272,8 @@ public class RoadGraphSystem : MonoBehaviour
                     positionToNode[roundedPos] = graphNode;
                 }
 
+                createdRoadNodes.Add(graphNode);
+
                 CreateVisualIndicator(graphNode.position, nodeIndicatorPrefab);
 
                 // 🔹 Conexión SECUENCIAL dentro de la misma carretera
@@ -281,21 +285,14 @@ public class RoadGraphSystem : MonoBehaviour
                     roadGraph.ConnectNodes(graphNode, previousNode, dist);
                 }
 
-                // 🔹 Conectar con intersecciones cercanas
-                foreach (var interNode in intersectionNodes)
-                {
-                    float dist = Vector3.Distance(graphNode.position, interNode.position);
-
-                    if (dist < 10f)
-                    {
-                        roadGraph.ConnectNodes(graphNode, interNode, dist);
-                        roadGraph.ConnectNodes(interNode, graphNode, dist);
-                    }
-                }
-
                 previousNode = graphNode;
 
                 yield return null;
+                
+            }
+            foreach (var roadNode in createdRoadNodes)
+            {
+                ConnectIfCloseToIntersection(roadNode, intersectionNodes);
             }
         }
 
@@ -310,6 +307,22 @@ public class RoadGraphSystem : MonoBehaviour
         DebugGraphInfo();
 
         Debug.Log($"Grafo construido. Nodos: {roadGraph.nodes.Count}, Aristas: {roadGraph.edges.Count}");
+    }
+
+    void ConnectIfCloseToIntersection(GraphNode roadNode, List<GraphNode> intersections)
+    {
+        float connectionThreshold = 5f; // ajusta si es necesario
+
+        foreach (var inter in intersections)
+        {
+            float dist = Vector3.Distance(roadNode.position, inter.position);
+
+            if (dist <= connectionThreshold)
+            {
+                roadGraph.ConnectNodes(roadNode, inter, dist);
+                roadGraph.ConnectNodes(inter, roadNode, dist);
+            }
+        }
     }
         
     // Método para mostrar información de nodos especiales
@@ -392,41 +405,63 @@ public class RoadGraphSystem : MonoBehaviour
     {
         List<(GraphNode start, GraphNode end)> edgesToSplit = new List<(GraphNode, GraphNode)>();
 
+        // 1️⃣ Identificar aristas largas
         foreach (var edge in roadGraph.edges)
         {
             if (edge.startNode == null || edge.endNode == null) continue;
-            if (Vector3.Distance(edge.startNode.position, edge.endNode.position) > maxSegmentLength)
+
+            float distance = Vector3.Distance(edge.startNode.position, edge.endNode.position);
+            if (distance > maxSegmentLength)
                 edgesToSplit.Add((edge.startNode, edge.endNode));
         }
 
+        // 2️⃣ Subdividir cada arista
         foreach (var (start, end) in edgesToSplit)
         {
-            float safeSegmentLength = Mathf.Min(maxSegmentLength, 10f);
-            int segments = Mathf.CeilToInt(Vector3.Distance(start.position, end.position) / safeSegmentLength);
+            float distance = Vector3.Distance(start.position, end.position);
+            int segments = Mathf.CeilToInt(distance / maxSegmentLength);
             if (segments <= 1) continue;
 
+            // Eliminar la arista original
             roadGraph.RemoveEdge(start, end);
 
             GraphNode prevNode = start;
 
-            for (int i = 1; i <= segments; i++)
+            for (int i = 1; i < segments; i++) // excluimos el nodo final
             {
                 float t = (float)i / segments;
+
+                // Interpolación lineal
                 Vector3 newPos = Vector3.Lerp(start.position, end.position, t);
+
+                // 🔹 Ajustar nodo sobre la carretera usando raycast hacia abajo
+                RaycastHit hit;
+                if (Physics.Raycast(newPos + Vector3.up * 10f, Vector3.down, out hit, 20f))
+                {
+                    newPos = hit.point + Vector3.up * 0.1f; // pequeño offset para evitar colisiones
+                }
+
                 GraphNode newNode = roadGraph.AddNode(newPos, $"SubNode_{start.id}_{end.id}_{i}", start.roadName);
 
+                // Conectar con el nodo anterior
                 roadGraph.ConnectNodes(prevNode, newNode, Vector3.Distance(prevNode.position, newNode.position));
+                roadGraph.ConnectNodes(newNode, prevNode, Vector3.Distance(prevNode.position, newNode.position));
+
                 prevNode = newNode;
 
-                if (i % 5 == 0) // espera un frame cada 5 nodos
+                if (i % 5 == 0) // dar un frame cada 5 nodos para no bloquear Unity
                     yield return null;
             }
+
+            // Conectar con el nodo final
+            roadGraph.ConnectNodes(prevNode, end, Vector3.Distance(prevNode.position, end.position));
+            roadGraph.ConnectNodes(end, prevNode, Vector3.Distance(prevNode.position, end.position));
         }
 
         roadGraph.RebuildAllConnections();
-        Debug.Log("Subdivisión de aristas largas completada.");
+        Debug.Log("Subdivisión de aristas largas completada (nodos ajustados sobre carretera).");
     }
-    
+        
     private string GetFullPath(Transform tr)
     {
         if (tr.parent == null)

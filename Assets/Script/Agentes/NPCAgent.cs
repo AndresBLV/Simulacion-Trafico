@@ -13,6 +13,7 @@ public class NPCAgent : MonoBehaviour
     public float rotationSpeed = 2f;
     public float minDistanceToNode = 2f;
     public float waitTimeAtIntersection = 3f;
+    private GraphNode previousNode;
     
     [Header("Debug")]
     public bool showPath = true;
@@ -44,6 +45,7 @@ public class NPCAgent : MonoBehaviour
             rb.linearDamping = 0.1f;
             rb.angularDamping = 0.5f;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            rb.useGravity = true;     // Importante
         }
         
         // Si no hay roadGraphSystem asignado, buscarlo
@@ -63,9 +65,6 @@ public class NPCAgent : MonoBehaviour
             Debug.LogWarning($"NPCAgent {gameObject.name}: El grafo está vacío. Intentando construir...");
             roadGraphSystem.BuildGraphAutomatically();
         }
-        
-        // Reconstruir conexiones
-        roadGraphSystem.roadGraph.RebuildAllConnections();
         
         // Si no hay startNode asignado, obtener uno aleatorio
         if (startNode == null)
@@ -137,50 +136,35 @@ public class NPCAgent : MonoBehaviour
         }
     }
     
-    private void FixedUpdate()
-    {
-        // Asegurar que no se vuelque
-        if (rb != null)
-        {
-            Vector3 euler = transform.rotation.eulerAngles;
-            euler.x = 0;
-            euler.z = 0;
-            transform.rotation = Quaternion.Euler(euler);
-        }
-    }
+    // private void FixedUpdate()
+    // {
+    //     // Asegurar que no se vuelque
+    //     if (rb != null)
+    //     {
+    //         Vector3 euler = transform.rotation.eulerAngles;
+    //         euler.x = 0;
+    //         euler.z = 0;
+    //         transform.rotation = Quaternion.Euler(euler);
+    //     }
+    // }
     
     private void MoveTowardsTarget()
     {
         if (currentPath == null || currentPathIndex >= currentPath.Count) return;
-        
-        // Calcular dirección
+
         Vector3 direction = (currentTargetPosition - transform.position).normalized;
-        
-        // Si está muy cerca, ir al siguiente nodo
-        if (Vector3.Distance(transform.position, currentTargetPosition) < 1f)
-        {
-            ReachNextNode();
-            return;
-        }
-        
+
         // Rotación suave
         if (direction != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(direction);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            rb.MoveRotation(Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
         }
-        
-        // Movimiento hacia adelante
-        transform.Translate(Vector3.forward * speed * Time.deltaTime, Space.Self);
-        
-        // Mantener altura
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position + Vector3.up, Vector3.down, out hit, 10f))
-        {
-            Vector3 pos = transform.position;
-            pos.y = hit.point.y + 0.5f;
-            transform.position = pos;
-        }
+
+        // Movimiento con Rigidbody
+        Vector3 velocity = direction * speed;
+        velocity.y = rb.linearVelocity.y; // Mantener velocidad vertical natural
+        rb.linearVelocity = velocity;
     }
 
     private void ReachNextNode()
@@ -188,6 +172,8 @@ public class NPCAgent : MonoBehaviour
         if (currentPath == null || currentPathIndex >= currentPath.Count) return;
         
         // Actualizar nodo actual
+        previousNode = currentNode;
+
         currentNode = currentPath[currentPathIndex];
         Debug.Log($"{gameObject.name} llegó a {currentNode.name}");
         
@@ -229,7 +215,6 @@ public class NPCAgent : MonoBehaviour
             return;
         }
         
-        roadGraphSystem.roadGraph.RebuildAllConnections();
         currentNode = roadGraphSystem.roadGraph.GetNodeById(currentNode.id);
         targetNode = roadGraphSystem.roadGraph.GetNodeById(targetNode.id);
         currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
@@ -250,31 +235,54 @@ public class NPCAgent : MonoBehaviour
         }
     }
 
-   public void FindNewDestination()
+    public void FindNewDestination()
     {
-        if (roadGraphSystem == null || roadGraphSystem.roadGraph == null || roadGraphSystem.roadGraph.nodes.Count < 2)
+        if (roadGraphSystem == null || 
+            roadGraphSystem.roadGraph == null || 
+            roadGraphSystem.roadGraph.nodes.Count < 2)
         {
-            Debug.LogError($"NPCAgent {gameObject.name}: Grafo no disponible o muy pequeño");
             return;
         }
-        
-        // Buscar un nodo aleatorio diferente al actual
+
         GraphNode newTarget = null;
         int attempts = 0;
-        int maxAttempts = 10;
-        
-        while (attempts < maxAttempts && (newTarget == null || newTarget == currentNode))
+        int maxAttempts = 20;
+
+        while (attempts < maxAttempts)
         {
             int randomIndex = Random.Range(0, roadGraphSystem.roadGraph.nodes.Count);
-            newTarget = roadGraphSystem.roadGraph.nodes[randomIndex];
-            attempts++;
+            GraphNode candidate = roadGraphSystem.roadGraph.nodes[randomIndex];
+
+            // ❌ No permitir mismo nodo
+            if (candidate == currentNode)
+            {
+                attempts++;
+                continue;
+            }
+
+            // ❌ No permitir volver al nodo anterior inmediato
+            if (candidate == previousNode)
+            {
+                attempts++;
+                continue;
+            }
+
+            // ❌ No permitir nodos demasiado cerca (evita medias vueltas)
+            if (Vector3.Distance(candidate.position, currentNode.position) < 15f)
+            {
+                attempts++;
+                continue;
+            }
+
+            // ✅ Aceptar candidato
+            newTarget = candidate;
+            break;
         }
-        
-        if (newTarget != null && newTarget != currentNode)
+
+        if (newTarget != null)
         {
             targetNode = newTarget;
             CalculatePathToTarget();
-            Debug.Log($"NPCAgent {gameObject.name}: Nuevo destino: {targetNode.name}");
         }
     }
         
@@ -322,16 +330,8 @@ public class NPCAgent : MonoBehaviour
             collision.gameObject.CompareTag("NPC") ||
             collision.gameObject.CompareTag("Obstacle"))
         {
-            Debug.Log($"NPCAgent {gameObject.name} - Colisión con objeto. Buscando nuevo destino...");
-            
-            // Pequeño retroceso
-            if (rb != null)
-            {
-                rb.AddForce(-transform.forward * 5f, ForceMode.Impulse);
-            }
-            
-            // Buscar nuevo destino
-            FindNewDestination();
+            Debug.Log($"NPCAgent {gameObject.name} - Colisión con objeto. Eliminando agente...");
+            Destroy(gameObject);
         }
     }
     
@@ -348,60 +348,7 @@ public class NPCAgent : MonoBehaviour
         if (other.CompareTag("Boundary"))
         {
             Debug.Log($"NPCAgent {gameObject.name} - Salió de los límites. Reiniciando...");
-            // Reposicionar en un nodo aleatorio
-            startNode = GetRandomNode();
-            if (startNode != null)
-            {
-                transform.position = startNode.position;
-                currentNode = startNode;
-                FindNewDestination();
-            }
-        }
-    }
-    
-    private void OnDrawGizmos()
-    {
-        if (!showPath || currentPath == null || currentPath.Count == 0) return;
-        
-        Gizmos.color = pathColor;
-        
-        // Dibujar línea desde el NPC hasta el próximo nodo
-        if (currentPathIndex < currentPath.Count)
-        {
-            Gizmos.DrawLine(transform.position, currentTargetPosition);
-            Gizmos.DrawSphere(currentTargetPosition, 0.3f);
-        }
-        
-        // Dibujar el resto del camino
-        for (int i = Mathf.Max(0, currentPathIndex - 1); i < currentPath.Count - 1; i++)
-        {
-            if (i >= 0 && i + 1 < currentPath.Count)
-            {
-                Gizmos.DrawLine(currentPath[i].position, currentPath[i + 1].position);
-                Gizmos.DrawSphere(currentPath[i].position, 0.2f);
-            }
-        }
-        
-        // Dibujar esfera en el destino final
-        if (currentPath.Count > 0)
-        {
-            Gizmos.DrawSphere(currentPath[currentPath.Count - 1].position, 0.5f);
-        }
-    }
-    
-    private void OnDrawGizmosSelected()
-    {
-        // Dibujar información adicional cuando está seleccionado
-        if (currentNode != null)
-        {
-            Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(currentNode.position, 1f);
-        }
-        
-        if (currentEdge != null && currentEdge.startNode != null && currentEdge.endNode != null)
-        {
-            Gizmos.color = Color.blue;
-            Gizmos.DrawLine(currentEdge.startNode.position, currentEdge.endNode.position);
+            Destroy(gameObject);
         }
     }
     

@@ -358,7 +358,7 @@ public class TrafficManager : MonoBehaviour
         trafficUpdateTimer += Time.deltaTime;
         if (trafficUpdateTimer >= trafficUpdateInterval)
         {
-            UpdateEdgeCostsBasedOnTraffic();
+            //UpdateEdgeCostsBasedOnTraffic();
             trafficUpdateTimer = 0f;
         }
         
@@ -389,9 +389,6 @@ public class TrafficManager : MonoBehaviour
             return;
         }
         
-        // Reconstruir conexiones antes de spawn
-        roadGraphSystem.roadGraph.RebuildAllConnections();
-        
         // Seleccionar nodo de spawn aleatorio
         GraphNode spawnNode = GetWeightedRandomSpawn();
         GraphNode targetNode = GetValidConnectedTarget(spawnNode);
@@ -401,10 +398,6 @@ public class TrafficManager : MonoBehaviour
             Debug.LogWarning("No hay destino válido para este spawn. Cancelando spawn.");
             return;
         }
-
-        // 🔹 CAMBIO: Asegurar que spawnNode y targetNode estén conectados
-        spawnNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(spawnNode) ?? spawnNode;
-        targetNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(targetNode) ?? targetNode;
 
         // Evitar que sea el mismo nodo
         int attempts = 0;
@@ -441,7 +434,8 @@ public class TrafficManager : MonoBehaviour
             npcAgent.roadGraphSystem = roadGraphSystem;
             npcAgent.startNode = spawnNode;
             npcAgent.targetNode = targetNode;
-            npcAgent.speed = Random.Range(minNPCSpeed, maxNPCSpeed);
+            float fixedSpeed = 30f; // velocidad fija para todos los NPCs
+            npcAgent.speed = fixedSpeed;
             npcAgent.showPath = true;
             npcAgent.minDistanceToNode = 1.5f;
             
@@ -527,49 +521,49 @@ public class TrafficManager : MonoBehaviour
         }
     }
     
-    void UpdateEdgeCostsBasedOnTraffic()
-    {
-        if (roadGraphSystem == null) return;
+    // void UpdateEdgeCostsBasedOnTraffic()
+    // {
+    //     if (roadGraphSystem == null) return;
         
-        // Reiniciar costos
-        foreach (GraphEdge edge in roadGraphSystem.roadGraph.edges)
-        {
-            edge.trafficCost = 0f;
-        }
+    //     // Reiniciar costos
+    //     foreach (GraphEdge edge in roadGraphSystem.roadGraph.edges)
+    //     {
+    //         edge.trafficCost = 0f;
+    //     }
         
-        // Actualizar costos basados en NPCs activos
-        foreach (NPCAgent npc in activeNPCs)
-        {
-            if (npc != null && npc.currentEdge != null)
-            {
-                npc.currentEdge.trafficCost += 0.1f;
-                if (npc.currentEdge.trafficCost > 3f)
-                    npc.currentEdge.trafficCost = 3f;
-            }
-        }
+    //     // Actualizar costos basados en NPCs activos
+    //     foreach (NPCAgent npc in activeNPCs)
+    //     {
+    //         if (npc != null && npc.currentEdge != null)
+    //         {
+    //             npc.currentEdge.trafficCost += 0.1f;
+    //             if (npc.currentEdge.trafficCost > 3f)
+    //                 npc.currentEdge.trafficCost = 3f;
+    //         }
+    //     }
         
-        // // Agregar costo por jugador
-        // if (playerTransform != null)
-        // {
-        //     CarAgent playerAgent = playerTransform.GetComponent<CarAgent>();
-        //     if (playerAgent != null && playerAgent.currentEdge != null)
-        //     {
-        //         playerAgent.currentEdge.trafficCost += 0.2f;
-        //         if (playerAgent.currentEdge.trafficCost > 3f)
-        //             playerAgent.currentEdge.trafficCost = 3f;
-        //     }
-        // }
+    //     // // Agregar costo por jugador
+    //     // if (playerTransform != null)
+    //     // {
+    //     //     CarAgent playerAgent = playerTransform.GetComponent<CarAgent>();
+    //     //     if (playerAgent != null && playerAgent.currentEdge != null)
+    //     //     {
+    //     //         playerAgent.currentEdge.trafficCost += 0.2f;
+    //     //         if (playerAgent.currentEdge.trafficCost > 3f)
+    //     //             playerAgent.currentEdge.trafficCost = 3f;
+    //     //     }
+    //     // }
         
-        // Debug: mostrar costos altos
-        if (debugMode)
-        {
-            int highTrafficEdges = roadGraphSystem.roadGraph.edges.Count(e => e.trafficCost > 1f);
-            if (highTrafficEdges > 0)
-            {
-                Debug.Log($"TrafficManager: {highTrafficEdges} aristas con tráfico alto (>1.0)");
-            }
-        }
-    }
+    //     // Debug: mostrar costos altos
+    //     if (debugMode)
+    //     {
+    //         int highTrafficEdges = roadGraphSystem.roadGraph.edges.Count(e => e.trafficCost > 1f);
+    //         if (highTrafficEdges > 0)
+    //         {
+    //             Debug.Log($"TrafficManager: {highTrafficEdges} aristas con tráfico alto (>1.0)");
+    //         }
+    //     }
+    // }
     
     void CheckForDespawn()
     {
