@@ -447,11 +447,6 @@ public class TrafficManager : MonoBehaviour
             
             // Inicializar NPC después de un frame
             StartCoroutine(InitializeNPCDelayed(npcAgent));
-            
-            Debug.Log($"TrafficManager: NPC generado - " +
-                     $"Desde: {(spawnNode.specialName ?? spawnNode.originalName)} " +
-                     $"Hacia: {(targetNode.specialName ?? targetNode.originalName)} " +
-                     $"Velocidad: {npcAgent.speed:F1}");
         }
         else
         {

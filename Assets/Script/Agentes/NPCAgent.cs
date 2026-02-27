@@ -148,27 +148,27 @@ public class NPCAgent : MonoBehaviour
     //     }
     // }
     
-    private void MoveTowardsTarget()
-    {
-        if (currentPath == null || currentPathIndex >= currentPath.Count) return;
-
-        Vector3 direction = (currentTargetPosition - transform.position).normalized;
-
-        // Rotación suave con Rigidbody
-        if (direction != Vector3.zero)
+        private void MoveTowardsTarget()
         {
-            Quaternion targetRotation = Quaternion.LookRotation(direction);
-            rb.MoveRotation(Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
+            if (currentPath == null || currentPathIndex >= currentPath.Count) return;
+
+            Vector3 direction = (currentTargetPosition - transform.position).normalized;
+
+            // Rotación suave con Rigidbody
+            if (direction != Vector3.zero)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(direction);
+                rb.MoveRotation(Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.fixedDeltaTime));
+            }
+
+            // Movimiento físico usando MovePosition
+            Vector3 nextPosition = transform.position + direction * speed * Time.fixedDeltaTime;
+
+            // Mantener la altura natural usando el Rigidbody
+            nextPosition.y = transform.position.y;
+
+            rb.MovePosition(nextPosition);
         }
-
-        // Movimiento físico usando MovePosition
-        Vector3 nextPosition = transform.position + direction * speed * Time.fixedDeltaTime;
-
-        // Mantener la altura natural usando el Rigidbody
-        nextPosition.y = transform.position.y;
-
-        rb.MovePosition(nextPosition);
-    }
 
     private void ReachNextNode()
     {

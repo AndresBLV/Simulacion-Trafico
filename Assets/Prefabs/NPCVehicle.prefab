@@ -28,6 +28,11 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 6
       objectReference: {fileID: 0}
+    - target: {fileID: 2070056589607149725, guid: 133308cdb8794744caaef026bde9e1f0,
+        type: 3}
+      propertyPath: showPath
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2762295717202265143, guid: 133308cdb8794744caaef026bde9e1f0,
         type: 3}
       propertyPath: m_Layer
@@ -162,76 +167,5 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 8587525523271884140}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 133308cdb8794744caaef026bde9e1f0, type: 3}
---- !u!1 &3475842691593141834 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
-    type: 3}
-  m_PrefabInstance: {fileID: 2146114796501423320}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &8587525523271884140
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3475842691593141834}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c98bde5c7b5555342ad6b831bb65c6ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  roadGraphSystem: {fileID: 0}
-  startNode:
-    id: 0
-    position: {x: 0, y: 0, z: 0}
-    isIntersection: 0
-    nodeType: 
-    originalName: 
-    roadName: 
-    displayName: 
-    specialName: 
-  targetNode:
-    id: 0
-    position: {x: 0, y: 0, z: 0}
-    isIntersection: 0
-    nodeType: 
-    originalName: 
-    roadName: 
-    displayName: 
-    specialName: 
-  speed: 10
-  rotationSpeed: 2
-  minDistanceToNode: 2
-  waitTimeAtIntersection: 3
-  showPath: 0
-  pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  currentPath: []
-  currentPathIndex: 0
-  currentTargetPosition: {x: 0, y: 0, z: 0}
-  isWaitingAtIntersection: 0
-  intersectionWaitTimer: 0
-  isInitialized: 0
-  rb: {fileID: 0}
-  currentNode:
-    id: 0
-    position: {x: 0, y: 0, z: 0}
-    isIntersection: 0
-    nodeType: 
-    originalName: 
-    roadName: 
-    displayName: 
-    specialName: 
-  currentEdge:
-    startNodeId: 0
-    endNodeId: 0
-    baseCost: 0
-    trafficCost: 0
-    laneCount: 0
-    speedLimit: 0
-    roadType: 

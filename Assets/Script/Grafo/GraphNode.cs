@@ -17,6 +17,9 @@ public class GraphNode
     
     // NUEVO: Nombre especial (para las entradas importantes)
     public string specialName = "";
+
+    [System.NonSerialized]
+    public GraphNode assignedDestino; // Nodo de destino asignado automáticamente
     
     // Propiedad name que combina la información disponible
     // PRIORIDAD: displayName -> originalName -> roadName -> Node_id
@@ -100,5 +103,10 @@ public class GraphNode
                 }
             }
         }
+    }
+
+    public bool HasAssignedDestino()
+    {
+        return assignedDestino != null;
     }
 }

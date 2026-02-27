@@ -14,6 +14,27 @@
         
         private List<GameObject> visualIndicators = new List<GameObject>();
         
+
+        private Dictionary<string, string> spawnToDestinoMapping = new Dictionary<string, string>
+        {
+            { "Spawn_Road2_Node1", "Destino_Road2_Node10" },
+            { "Spawn_Road1_Node1", "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node9", "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node11", "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node18", "Destino_Road1_Node29" },
+            { "Spawn_Road5_Node1", "Destino_Road5_Node21" },
+            { "Spawn_Road5_Node17", "Destino_Road5_Node21" },
+            { "Spawn_Road5_Node20", "Destino_Road5_Node21" },
+            { "Spawn_Road3_Node14", "Destino_Road3_Node24" },
+            { "Spawn_Road8_Node7", "Destino_Road8_Node11" },
+            { "Spawn_Road8_Node13", "Destino_Road8_Node16" },
+            { "Spawn_Road10_Node3", "Destino_Road10_Node9" },
+            { "Spawn_Road7_Node2", "Destino_Road7_Node7" },
+            { "Spawn_Road3_Node2", "Destino_Road3_Node9" },
+            { "Spawn_Road11_Node3", "Destino_Road11_Node10" }
+            // Agrega más según necesites
+        };
+                
         // Diccionario extendido de nombres especiales para TODOS los nodos importantes
         Dictionary<string, string> specialNodeNames = new Dictionary<string, string>
         {
@@ -22,15 +43,34 @@
             { "Inter3", "Acceso Distribuidor Metropolitano (Autopista)" },
 
             // ===== SPAWN OFICIALES =====
-            // { "Node8(Road8)", "Spawn_Road3_Node22" },
-            // { "Node1(Road1)", "Spawn_Road1_Node1" },
+            { "Node7(Road8)", "Spawn_Road8_Node7" },
+            { "Node13(Road8)", "Spawn_Road8_Node13" },
+            { "Node1(Road1)", "Spawn_Road1_Node1" },
+            { "Node9(Road1)", "Spawn_Road1_Node9" },
+            { "Node11(Road1)", "Spawn_Road1_Node11" },
+            { "Node18(Road1)", "Spawn_Road1_Node18" },
             { "Node1(Road2)", "Spawn_Road2_Node1" },
-            // { "Node1(Road5)", "Spawn_Road5_Node1" },
+            { "Node1(Road5)", "Spawn_Road5_Node1" },
+            { "Node17(Road5)", "Spawn_Road5_Node17" },
+            { "Node20(Road5)", "Spawn_Road5_Node20" },
+            { "Node14(Road3)", "Spawn_Road3_Node14" },
+            { "Node2(Road3)", "Spawn_Road3_Node2" },
+            { "Node3(Road10)", "Spawn_Road10_Node3" },
+            { "Node2(Road7)", "Spawn_Road7_Node2" },
+            { "Node3(Road11)", "Spawn_Road11_Node3" },
 
             // ===== DESTINOS (si los necesitas) =====
-            // { "Node29(Road1)", "Destino_Road1_Node29" },
-            // { "Node21(Road5)", "Destino_Road5_Node21" },
-            { "Node21(Road3)", "Destino_Road3_Node21" }
+            { "Node29(Road1)", "Destino_Road1_Node29" },
+            { "Node21(Road5)", "Destino_Road5_Node21" },
+            { "Node10(Road2)", "Destino_Road2_Node10" },
+            { "Node11(Road8)", "Destino_Road8_Node11" },
+            { "Node16(Road8)", "Destino_Road8_Node16" },
+            { "Node9(Road10)", "Destino_Road10_Node9" },
+            { "Node9(Road3)", "Destino_Road3_Node9" },
+            { "Node7(Road7)", "Destino_Road7_Node7" },
+            { "Node10(Road11)", "Destino_Road11_Node10" },
+            { "Node24(Road3)", "Destino_Road3_Node24" }
+            
         };
         
         // Método público para obtener nodos por nombre especial
@@ -306,7 +346,37 @@
 
             DebugGraphInfo();
 
+            AssignDestinosToSpawns();
+
             Debug.Log($"Grafo construido. Nodos: {roadGraph.nodes.Count}, Aristas: {roadGraph.edges.Count}");
+        }
+
+        public void AssignDestinosToSpawns()
+        {
+            var spawnNodes = GetSpawnNodesByType("spawn"); // todos los nodos de spawn
+
+            foreach (var spawn in spawnNodes)
+            {
+                if (string.IsNullOrEmpty(spawn.specialName)) continue;
+
+                if (spawnToDestinoMapping.TryGetValue(spawn.specialName, out string destinoName))
+                {
+                    var destinoNode = roadGraph.nodes.FirstOrDefault(n => n.specialName == destinoName);
+                    if (destinoNode != null)
+                    {
+                        spawn.assignedDestino = destinoNode; // asigna el destino
+                        Debug.Log($"Spawn {spawn.specialName} -> Destino {destinoNode.specialName}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"No se encontró el nodo destino {destinoName} para el spawn {spawn.specialName}");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"No hay destino definido para el spawn {spawn.specialName}");
+                }
+            }
         }
 
         void ConnectIfCloseToIntersection(GraphNode roadNode, List<GraphNode> intersections)
