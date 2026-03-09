@@ -504,7 +504,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2792218741957914664}
   - component: {fileID: 7495443279060062592}
-  - component: {fileID: 2070056589607149725}
+  - component: {fileID: 9063720840708874265}
   m_Layer: 0
   m_Name: Free Racing Car
   m_TagString: Untagged
@@ -557,7 +557,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &2070056589607149725
+--- !u!114 &9063720840708874265
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 4710386744780114714}
   - component: {fileID: 4450806795601807231}
+  - component: {fileID: 3214785835057368875}
+  - component: {fileID: -1370839804425445596}
   m_Layer: 0
   m_Name: kozak_i_van
   m_TagString: Untagged
@@ -54,6 +56,94 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.413354, y: 3.2162495, z: 8.064726}
   m_Center: {x: 0.006435156, y: 1.6285484, z: -0.019057274}
+--- !u!54 &3214785835057368875
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3298527340143751871}
+  serializedVersion: 4
+  m_Mass: 1000
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
+--- !u!114 &-1370839804425445596
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3298527340143751871}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c98bde5c7b5555342ad6b831bb65c6ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  roadGraphSystem: {fileID: 0}
+  startNode:
+    id: 0
+    position: {x: 0, y: 0, z: 0}
+    isIntersection: 0
+    nodeType: 
+    originalName: 
+    roadName: 
+    displayName: 
+    specialName: 
+  targetNode:
+    id: 0
+    position: {x: 0, y: 0, z: 0}
+    isIntersection: 0
+    nodeType: 
+    originalName: 
+    roadName: 
+    displayName: 
+    specialName: 
+  speed: 10
+  rotationSpeed: 2
+  minDistanceToNode: 2
+  waitTimeAtIntersection: 3
+  showPath: 1
+  pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  currentPath: []
+  currentPathIndex: 0
+  currentTargetPosition: {x: 0, y: 0, z: 0}
+  isWaitingAtIntersection: 0
+  intersectionWaitTimer: 0
+  isInitialized: 0
+  rb: {fileID: 0}
+  currentNode:
+    id: 0
+    position: {x: 0, y: 0, z: 0}
+    isIntersection: 0
+    nodeType: 
+    originalName: 
+    roadName: 
+    displayName: 
+    specialName: 
+  currentEdge:
+    startNodeId: 0
+    endNodeId: 0
+    baseCost: 0
+    trafficCost: 0
+    laneCount: 0
+    speedLimit: 0
+    roadType: 
 --- !u!1001 &6679031892515441374
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -62,47 +152,58 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 4710386744780114714}
     m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalPosition.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalPosition.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalRotation.w
       value: 1
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalRotation.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalRotation.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalRotation.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+    - target: {fileID: 919132149155446097, guid: 72a2d2411a727214a948477c6cf82a07,
+        type: 3}
       propertyPath: m_Name
       value: Model
       objectReference: {fileID: 0}
@@ -113,6 +214,7 @@ PrefabInstance:
   m_SourcePrefab: {fileID: 100100000, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
 --- !u!4 &6573576931107548469 stripped
 Transform:
-  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07, type: 3}
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 72a2d2411a727214a948477c6cf82a07,
+    type: 3}
   m_PrefabInstance: {fileID: 6679031892515441374}
   m_PrefabAsset: {fileID: 0}

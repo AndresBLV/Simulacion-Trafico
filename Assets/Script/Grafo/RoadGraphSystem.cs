@@ -19,10 +19,12 @@
         {
             { "Spawn_Road2_Node1", "Destino_Road2_Node10" },
             { "Spawn_Road1_Node1", "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node3", "Destino_Road1_Node29" },
             { "Spawn_Road1_Node9", "Destino_Road1_Node29" },
             { "Spawn_Road1_Node11", "Destino_Road1_Node29" },
             { "Spawn_Road1_Node18", "Destino_Road1_Node29" },
-            { "Spawn_Road5_Node1", "Destino_Road5_Node21" },
+            { "Spawn_Road5_Node2", "Destino_Road5_Node21" },
+            { "Spawn_Road5_Node1", "Destino_Road5_Node15" },
             { "Spawn_Road5_Node17", "Destino_Road5_Node21" },
             { "Spawn_Road5_Node20", "Destino_Road5_Node21" },
             { "Spawn_Road3_Node14", "Destino_Road3_Node24" },
@@ -31,6 +33,10 @@
             { "Spawn_Road10_Node3", "Destino_Road10_Node9" },
             { "Spawn_Road7_Node2", "Destino_Road7_Node7" },
             { "Spawn_Road3_Node2", "Destino_Road3_Node9" },
+            { "Spawn_Road4_Node2", "Destino_Road4_Node12" },
+            { "Spawn_Road4_Node3", "Destino_Road4_Node12" },
+            { "Spawn_Road4_Node4", "Destino_Road4_Node12" },
+            { "Spawn_Road2_Node3", "Destino_Road2_Node10" },
             { "Spawn_Road11_Node3", "Destino_Road11_Node10" }
             // Agrega más según necesites
         };
@@ -46,11 +52,18 @@
             { "Node7(Road8)", "Spawn_Road8_Node7" },
             { "Node13(Road8)", "Spawn_Road8_Node13" },
             { "Node1(Road1)", "Spawn_Road1_Node1" },
+            { "Node3(Road1)", "Spawn_Road1_Node3" },
             { "Node9(Road1)", "Spawn_Road1_Node9" },
             { "Node11(Road1)", "Spawn_Road1_Node11" },
             { "Node18(Road1)", "Spawn_Road1_Node18" },
             { "Node1(Road2)", "Spawn_Road2_Node1" },
+            { "Node2(Road2)", "Spawn_Road2_Node2" },
+            { "Node3(Road6)", "Spawn_Road6_Node3" },
+            { "Node2(Road4)", "Spawn_Road4_Node2" },
+            { "Node3(Road4)", "Spawn_Road4_Node3" },
+            { "Node4(Road4)", "Spawn_Road4_Node4" },
             { "Node1(Road5)", "Spawn_Road5_Node1" },
+            { "Node2(Road5)", "Spawn_Road5_Node2" },
             { "Node17(Road5)", "Spawn_Road5_Node17" },
             { "Node20(Road5)", "Spawn_Road5_Node20" },
             { "Node14(Road3)", "Spawn_Road3_Node14" },
@@ -62,13 +75,16 @@
             // ===== DESTINOS (si los necesitas) =====
             { "Node29(Road1)", "Destino_Road1_Node29" },
             { "Node21(Road5)", "Destino_Road5_Node21" },
+            { "Node15(Road5)", "Destino_Road5_Node15" },
             { "Node10(Road2)", "Destino_Road2_Node10" },
             { "Node11(Road8)", "Destino_Road8_Node11" },
             { "Node16(Road8)", "Destino_Road8_Node16" },
             { "Node9(Road10)", "Destino_Road10_Node9" },
+            { "Node12(Road4)", "Destino_Road4_Node12" },
             { "Node9(Road3)", "Destino_Road3_Node9" },
             { "Node7(Road7)", "Destino_Road7_Node7" },
             { "Node10(Road11)", "Destino_Road11_Node10" },
+            { "Node14(Road6)", "Destino_Road6_Node14" },
             { "Node24(Road3)", "Destino_Road3_Node24" }
             
         };

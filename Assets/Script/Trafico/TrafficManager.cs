@@ -25,6 +25,15 @@ public class TrafficManager : MonoBehaviour
     public bool debugMode = true;
     public bool showSpawnGizmos = true;
     public bool showTargetGizmos = true;
+
+    [System.Serializable]
+    public class SpawnPrefabMapping
+    {
+        public string spawnSpecialName;
+        public GameObject prefab;
+    }
+
+    public List<SpawnPrefabMapping> spawnPrefabMappings = new List<SpawnPrefabMapping>();
     
     // Listas de nodos
     private List<GraphNode> spawnNodes = new List<GraphNode>();
@@ -95,6 +104,21 @@ public class TrafficManager : MonoBehaviour
         StartCoroutine(InitialSpawn());
     }
 
+    GameObject GetPrefabForSpawn(GraphNode spawnNode)
+    {
+        foreach (var mapping in spawnPrefabMappings)
+        {
+            if (mapping.spawnSpecialName == spawnNode.specialName && mapping.prefab != null)
+            {
+                Debug.Log($"Usando prefab personalizado para {spawnNode.specialName}");
+                return mapping.prefab;
+            }
+        }
+
+        // Si no está en la lista → usar prefab normal
+        return npcVehiclePrefab;
+    }
+
     void ConfigureSpawnWeights()
     {
         weightedSpawns.Clear();
@@ -107,6 +131,11 @@ public class TrafficManager : MonoBehaviour
             if (node.specialName.Contains("Road3"))
             {
                 weight = 0.5f; // puedes cambiar a 2f si quieres menos
+            }
+
+            if (node.specialName == "Spawn_Road4_Node4")
+            {
+                weight = 0.5f;
             }
 
             weightedSpawns.Add(new WeightedSpawn
@@ -423,7 +452,8 @@ public class TrafficManager : MonoBehaviour
         }
         
         // Instanciar NPC
-        GameObject npcObj = Instantiate(npcVehiclePrefab, spawnPos, Quaternion.identity, transform);
+        GameObject prefabToUse = GetPrefabForSpawn(spawnNode);
+        GameObject npcObj = Instantiate(prefabToUse, spawnPos, Quaternion.identity, transform);
         npcObj.name = $"NPC_{System.Guid.NewGuid().ToString().Substring(0, 8)}";
         
         // Configurar NPCAgent
