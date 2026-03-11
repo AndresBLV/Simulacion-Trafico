@@ -594,11 +594,12 @@ MonoBehaviour:
   rotationSpeed: 2
   minDistanceToNode: 2
   waitTimeAtIntersection: 3
-  showPath: 1
+  showPath: 0
   pathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   vehicleFollowDistance: 12
   vehicleStopDistance: 15
   ignoreQueueBlock: 0
+  isHardStopped: 0
   currentPath: []
   currentPathIndex: 0
   currentTargetPosition: {x: 0, y: 0, z: 0}

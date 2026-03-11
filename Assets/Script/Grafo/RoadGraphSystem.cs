@@ -17,14 +17,14 @@
 
         private Dictionary<string, string> spawnToDestinoMapping = new Dictionary<string, string>
         {
-            { "Spawn_Road2_Node1", "Destino_Road2_Node10" },
-            { "Spawn_Road1_Node1", "Destino_Road1_Node29" },
-            { "Spawn_Road1_Node3", "Destino_Road1_Node29" },
-            { "Spawn_Road1_Node9", "Destino_Road1_Node29" },
+            { "Spawn_Road2_Node1",  "Destino_Road2_Node10" },
+            { "Spawn_Road1_Node1",  "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node3",  "Destino_Road1_Node29" },
+            { "Spawn_Road1_Node9",  "Destino_Road1_Node29" },
             { "Spawn_Road1_Node11", "Destino_Road1_Node29" },
             { "Spawn_Road1_Node18", "Destino_Road1_Node29" },
-            { "Spawn_Road5_Node2", "Destino_Road5_Node21" },
-            { "Spawn_Road5_Node1", "Destino_Road5_Node15" },
+            { "Spawn_Road5_Node2",  "Destino_Road5_Node21" },
+            { "Spawn_Road5_Node1",  "Destino_Road5_Node15" },
             { "Spawn_Road5_Node17", "Destino_Road5_Node21" },
             { "Spawn_Road5_Node20", "Destino_Road5_Node21" },
             { "Spawn_Road3_Node14", "Destino_Road3_Node28" },
@@ -32,17 +32,17 @@
             { "Spawn_Road3_Node16", "Destino_Road3_Node28" },
             { "Spawn_Road3_Node17", "Destino_Road3_Node28" },
             { "Spawn_Road3_Node18", "Destino_Road3_Node28" },
-            { "Spawn_Road8_Node7", "Destino_Road8_Node11" },
+            { "Spawn_Road8_Node7",  "Destino_Road8_Node11" },
             { "Spawn_Road8_Node13", "Destino_Road8_Node16" },
             { "Spawn_Road10_Node3", "Destino_Road10_Node8" },
-            { "Spawn_Road7_Node2", "Destino_Road7_Node4" },
-            { "Spawn_Road7_Node5", "Destino_Road7_Node7" },
-            { "Spawn_Road3_Node2", "Destino_Road3_Node9" },
-            { "Spawn_Road4_Node2", "Destino_Road4_Node12" },
-            { "Spawn_Road4_Node3", "Destino_Road4_Node12" },
-            { "Spawn_Road4_Node4", "Destino_Road4_Node12" },
-            { "Spawn_Road2_Node3", "Destino_Road2_Node10" },
-            { "Spawn_Road8_Node3", "Destino_Road8_Node11" },
+            { "Spawn_Road7_Node2",  "Destino_Road7_Node4" },
+            { "Spawn_Road7_Node5",  "Destino_Road7_Node7" },
+            { "Spawn_Road3_Node2",  "Destino_Road3_Node9" },
+            { "Spawn_Road4_Node2",  "Destino_Road4_Node12" },
+            { "Spawn_Road4_Node3",  "Destino_Road4_Node12" },
+            { "Spawn_Road4_Node4",  "Destino_Road4_Node12" },
+            { "Spawn_Road2_Node3",  "Destino_Road2_Node10" },
+            { "Spawn_Road8_Node3",  "Destino_Road8_Node11" },
             { "Spawn_Road11_Node3", "Destino_Road11_Node10" }
             // Agrega más según necesites
         };
@@ -383,7 +383,7 @@
 
         public void AssignDestinosToSpawns()
         {
-            var spawnNodes = GetSpawnNodesByType("spawn"); // todos los nodos de spawn
+            var spawnNodes = GetSpawnNodesByType("spawn");
 
             foreach (var spawn in spawnNodes)
             {
@@ -394,7 +394,7 @@
                     var destinoNode = roadGraph.nodes.FirstOrDefault(n => n.specialName == destinoName);
                     if (destinoNode != null)
                     {
-                        spawn.assignedDestino = destinoNode; // asigna el destino
+                        spawn.assignedDestino = destinoNode;
                         Debug.Log($"Spawn {spawn.specialName} -> Destino {destinoNode.specialName}");
                     }
                     else

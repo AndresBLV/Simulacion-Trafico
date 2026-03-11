@@ -207468,7 +207468,14 @@ MonoBehaviour:
     roadName: Road3
     nodeName: Node26
     interval: 180
-    duration: 30
+    duration: 45
+    isActive: 0
+    activeNodes: []
+  - enabled: 1
+    roadName: Road8
+    nodeName: Node11
+    interval: 180
+    duration: 45
     isActive: 0
     activeNodes: []
   spawnPrefabMappings:
