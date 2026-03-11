@@ -18,6 +18,8 @@ public class GraphNode
     // NUEVO: Nombre especial (para las entradas importantes)
     public string specialName = "";
 
+    public bool isBlocked = false; // Nodo bloqueado temporalmente (cuello de botella)
+
     [System.NonSerialized]
     public GraphNode assignedDestino; // Nodo de destino asignado automáticamente
     

@@ -26,6 +26,30 @@ public class TrafficManager : MonoBehaviour
     public bool showSpawnGizmos = true;
     public bool showTargetGizmos = true;
 
+    [Header("Simulación de Colas")]
+    public List<BottleneckConfig> bottlenecks = new List<BottleneckConfig>
+    {
+        new BottleneckConfig { roadName = "Road4", nodeName = "Node12", interval = 180f, duration = 30f },
+        new BottleneckConfig { roadName = "Road3", nodeName = "Node26", interval = 180f, duration = 30f }
+    };
+
+    [System.Serializable]
+    public class BottleneckConfig
+    {
+        public bool enabled = true;
+        [Tooltip("Nombre exacto del road (ej: Road4)")]
+        public string roadName;
+        [Tooltip("Nombre exacto del nodo ancla (ej: Node12)")]
+        public string nodeName;
+        [Tooltip("Segundos entre activaciones")]
+        public float interval = 180f;
+        [Tooltip("Segundos que dura la cola")]
+        public float duration = 30f;
+
+        [HideInInspector] public bool isActive = false;
+        [HideInInspector] public List<GraphNode> activeNodes = new List<GraphNode>();
+    }
+
     [System.Serializable]
     public class SpawnPrefabMapping
     {
@@ -102,6 +126,12 @@ public class TrafficManager : MonoBehaviour
         Debug.Log($"TrafficManager inicializado correctamente. Spawn: {spawnNodes.Count} Destino: {targetNodes.Count}");
 
         StartCoroutine(InitialSpawn());
+
+        foreach (var config in bottlenecks)
+        {
+            if (config.enabled)
+                StartCoroutine(BottleneckRoutine(config));
+        }
     }
 
     GameObject GetPrefabForSpawn(GraphNode spawnNode)
@@ -135,7 +165,7 @@ public class TrafficManager : MonoBehaviour
 
             if (node.specialName == "Spawn_Road4_Node4")
             {
-                weight = 0.5f;
+                weight = 0.3f;
             }
 
             weightedSpawns.Add(new WeightedSpawn
@@ -427,15 +457,6 @@ public class TrafficManager : MonoBehaviour
             Debug.LogWarning("No hay destino válido para este spawn. Cancelando spawn.");
             return;
         }
-
-        // Evitar que sea el mismo nodo
-        int attempts = 0;
-        while (spawnNode == targetNode && attempts < 5)
-        {
-            targetNode = targetNodes[Random.Range(0, targetNodes.Count)];
-            targetNode = roadGraphSystem.roadGraph.FindClosestConnectedNode(targetNode) ?? targetNode;
-            attempts++;
-        }
         
         // Calcular posición de spawn
         Vector3 spawnPos = spawnNode.position;
@@ -487,16 +508,17 @@ public class TrafficManager : MonoBehaviour
 
     GraphNode GetValidConnectedTarget(GraphNode spawnNode)
     {
-        foreach (var candidate in targetNodes.OrderBy(x => Random.value))
+        if (spawnNode.assignedDestino == null)
         {
-            var path = roadGraphSystem.roadGraph.FindPath(spawnNode, candidate);
-            if (path != null && path.Count > 0)
-            {
-                return candidate;
-            }
+            Debug.LogWarning($"[Spawn] '{spawnNode.specialName ?? spawnNode.originalName}' no tiene destino asignado. Agrégalo al diccionario spawnToDestinoMapping.");
+            return null;
         }
 
-        Debug.LogWarning($"No se encontró destino conectado para {spawnNode.originalName}");
+        var path = roadGraphSystem.roadGraph.FindPath(spawnNode, spawnNode.assignedDestino);
+        if (path != null && path.Count > 0)
+            return spawnNode.assignedDestino;
+
+        Debug.LogWarning($"[Spawn] '{spawnNode.specialName}' → '{spawnNode.assignedDestino.specialName}' no tiene ruta válida en el grafo.");
         return null;
     }
 
@@ -692,6 +714,168 @@ public class TrafficManager : MonoBehaviour
         }
     }
     
+    // ============================================================
+    // SIMULACIÓN DE COLAS - GENÉRICO
+    // ============================================================
+
+    [Header("Bottleneck - Distancias")]
+    [Tooltip("Distancia a la que el vehículo para completamente")]
+    public float bottleneckHardStopDist = 16f;
+    [Tooltip("Distancia a la que el vehículo empieza a frenar")]
+    public float bottleneckSlowDist = 30f;
+
+    private Dictionary<NPCAgent, float> throttledNPCs = new Dictionary<NPCAgent, float>();
+
+    IEnumerator BottleneckRoutine(BottleneckConfig config)
+    {
+        // Espera inicial escalonada según el índice para que no coincidan
+        int idx = bottlenecks.IndexOf(config);
+        yield return new WaitForSeconds(15f + idx * 8f);
+
+        while (true)
+        {
+            if (!config.isActive)
+                yield return ActivateBottleneck(config);
+
+            yield return new WaitForSeconds(config.interval);
+        }
+    }
+
+    IEnumerator ActivateBottleneck(BottleneckConfig config)
+    {
+        if (config.isActive) yield break;
+
+        GraphNode anchorNode = FindBottleneckAnchor(config.roadName, config.nodeName);
+
+        if (anchorNode == null)
+        {
+            Debug.LogWarning($"[Bottleneck] Nodo '{config.nodeName}' en '{config.roadName}' no encontrado. "
+                + "Nodos disponibles: "
+                + string.Join(", ", roadGraphSystem.roadGraph.nodes
+                    .Where(n => n.roadName == config.roadName)
+                    .Select(n => n.originalName)));
+            yield break;
+        }
+
+        config.activeNodes.Clear();
+        config.activeNodes.Add(anchorNode);
+        config.isActive = true;
+        anchorNode.isBlocked = true;
+
+        Debug.Log($"[Bottleneck] Cola activada: {config.roadName}/{config.nodeName} — {config.duration}s");
+
+        float elapsed = 0f;
+        while (elapsed < config.duration)
+        {
+            ApplyBottleneckSpeeds(anchorNode.position);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        ReleaseBottleneckSpeeds();
+
+        foreach (var node in config.activeNodes)
+            node.isBlocked = false;
+
+        config.activeNodes.Clear();
+        config.isActive = false;
+
+        Debug.Log($"[Bottleneck] Cola liberada: {config.roadName}/{config.nodeName}");
+    }
+
+    GraphNode FindBottleneckAnchor(string roadName, string nodeName)
+    {
+        // Buscar por roadName + originalName
+        GraphNode node = roadGraphSystem.roadGraph.nodes
+            .FirstOrDefault(n => n.roadName == roadName && n.originalName == nodeName);
+
+        // Fallback: buscar solo por originalName si el nodo tiene specialName
+        if (node == null)
+            node = roadGraphSystem.roadGraph.nodes
+                .FirstOrDefault(n => n.originalName == nodeName
+                    && (n.roadName == roadName || n.specialName.Contains(roadName)));
+
+        return node;
+    }
+
+    void ApplyBottleneckSpeeds(Vector3 blockPos)
+    {
+        foreach (var npc in activeNPCs)
+        {
+            if (npc == null) continue;
+
+            Vector3 toBlock = blockPos - npc.transform.position;
+            float dist = toBlock.magnitude;
+
+            if (dist > bottleneckSlowDist) continue;
+
+            float dot = Vector3.Dot(npc.transform.forward, toBlock.normalized);
+            if (dot < 0.5f) continue;
+
+            if (!throttledNPCs.ContainsKey(npc))
+                throttledNPCs[npc] = npc.speed > 0f ? npc.speed : 30f;
+
+            float originalSpeed = throttledNPCs[npc];
+
+            if (dist <= bottleneckHardStopDist)
+            {
+                npc.speed = 0f;
+                npc.isHardStopped = true;
+            }
+            else
+            {
+                float t = (dist - bottleneckHardStopDist) / (bottleneckSlowDist - bottleneckHardStopDist);
+                npc.speed = originalSpeed * Mathf.Pow(t, 2f);
+            }
+        }
+    }
+
+    void ReleaseBottleneckSpeeds()
+    {
+        foreach (var kvp in throttledNPCs)
+        {
+            if (kvp.Key == null) continue;
+            kvp.Key.speed = kvp.Value;
+            kvp.Key.isHardStopped = false;
+        }
+        throttledNPCs.Clear();
+
+        foreach (var npc in activeNPCs)
+        {
+            if (npc == null) continue;
+            npc.isHardStopped = false;
+            npc.ignoreQueueBlock = true;
+            if (npc.speed <= 0f)
+                npc.speed = 30f;
+        }
+
+        StartCoroutine(ReenableQueueBlockRoutine(5f));
+    }
+
+    IEnumerator ReenableQueueBlockRoutine(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        foreach (var npc in activeNPCs)
+        {
+            if (npc != null)
+                npc.ignoreQueueBlock = false;
+        }
+    }
+
+    [ContextMenu("Liberar Todas las Colas (Manual)")]
+    public void ReleaseAllBottlenecksManual()
+    {
+        foreach (var config in bottlenecks)
+        {
+            foreach (var node in config.activeNodes)
+                node.isBlocked = false;
+            config.activeNodes.Clear();
+            config.isActive = false;
+        }
+        ReleaseBottleneckSpeeds();
+        Debug.Log("[Bottleneck] Todas las colas liberadas manualmente.");
+    }
+
     void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;
@@ -724,6 +908,21 @@ public class TrafficManager : MonoBehaviour
             }
         }
         
+        // Dibujar nodos bloqueados de cada bottleneck activo
+        foreach (var config in bottlenecks)
+        {
+            if (!config.isActive) continue;
+            Gizmos.color = Color.yellow;
+            foreach (var node in config.activeNodes)
+            {
+                if (node != null)
+                {
+                    Gizmos.DrawSphere(node.position, 2f);
+                    Gizmos.DrawWireSphere(node.position, 4f);
+                }
+            }
+        }
+
         // Dibujar NPCs activos (azul)
         Gizmos.color = Color.blue;
         foreach (var npc in activeNPCs)

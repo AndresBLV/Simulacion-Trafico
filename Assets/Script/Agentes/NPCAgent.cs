@@ -18,6 +18,12 @@ public class NPCAgent : MonoBehaviour
     [Header("Debug")]
     public bool showPath = true;
     public Color pathColor = Color.yellow;
+
+    [Header("Simulación de Colas")]
+    public float vehicleFollowDistance = 12f;
+    public float vehicleStopDistance = 15f;
+    [HideInInspector] public bool ignoreQueueBlock = false;
+    [HideInInspector] public bool isHardStopped = false;
     
     // Variables privadas
     public List<GraphNode> currentPath;
@@ -104,7 +110,20 @@ public class NPCAgent : MonoBehaviour
     void Update()
     {
         if (!isInitialized) return;
-        
+
+        // Parada forzada por bottleneck: ancla posición sin kinematic para evitar
+        // que la resolución de colisiones lance vehículos en direcciones inesperadas
+        if (isHardStopped)
+        {
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.MovePosition(transform.position);
+            }
+            return;
+        }
+
         // Si está esperando en una intersección
         if (isWaitingAtIntersection)
         {
@@ -126,6 +145,10 @@ public class NPCAgent : MonoBehaviour
             return;
         }
         
+        // Detención por cola: nodo bloqueado adelante o vehículo próximo
+        if (IsQueueBlocked())
+            return;
+
         // Moverse hacia el objetivo
         MoveTowardsTarget();
         
@@ -325,6 +348,42 @@ public class NPCAgent : MonoBehaviour
         return roadGraphSystem.roadGraph.nodes[Random.Range(0, roadGraphSystem.roadGraph.nodes.Count)];
     }
     
+    private bool IsQueueBlocked()
+    {
+        // Durante la liberación del bottleneck se ignora temporalmente para romper el deadlock
+        if (ignoreQueueBlock) return false;
+
+        // Buscar nodos bloqueados en los próximos pasos de la ruta
+        if (currentPath != null)
+        {
+            int lookAhead = 8;
+            for (int i = currentPathIndex; i < currentPath.Count && i < currentPathIndex + lookAhead; i++)
+            {
+                GraphNode node = currentPath[i];
+                if (!node.isBlocked) continue;
+
+                float dist = Vector3.Distance(transform.position, node.position);
+                if (dist < vehicleStopDistance)
+                    return true;
+            }
+        }
+
+        // Parar si hay otro vehículo directamente adelante (seguimiento de cola)
+        Collider[] nearby = Physics.OverlapSphere(
+            transform.position + transform.forward * (vehicleFollowDistance * 0.5f), 2.5f);
+        foreach (var col in nearby)
+        {
+            if (col.gameObject == gameObject) continue;
+            NPCAgent other = col.GetComponentInParent<NPCAgent>();
+            if (other == null) continue;
+            Vector3 toOther = (other.transform.position - transform.position).normalized;
+            if (Vector3.Dot(transform.forward, toOther) > 0.4f)
+                return true;
+        }
+
+        return false;
+    }
+
     private void OnCollisionEnter(Collision collision)
     {
         Debug.Log($"NPCAgent {gameObject.name} - Colisión con: {collision.gameObject.name}");

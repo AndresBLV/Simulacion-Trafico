@@ -207456,6 +207456,21 @@ MonoBehaviour:
   debugMode: 0
   showSpawnGizmos: 0
   showTargetGizmos: 0
+  bottlenecks:
+  - enabled: 0
+    roadName: Road4
+    nodeName: Node12
+    interval: 180
+    duration: 30
+    isActive: 0
+    activeNodes: []
+  - enabled: 1
+    roadName: Road3
+    nodeName: Node26
+    interval: 180
+    duration: 30
+    isActive: 0
+    activeNodes: []
   spawnPrefabMappings:
   - spawnSpecialName: Spawn_Road1_Node3
     prefab: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
@@ -207481,6 +207496,8 @@ MonoBehaviour:
   - spawnSpecialName: Spawn_Road5_Node1
     prefab: {fileID: 6645616114513181105, guid: 62010132604e8c94d96b4cb4fe6d3394,
       type: 3}
+  bottleneckHardStopDist: 16
+  bottleneckSlowDist: 30
 --- !u!114 &1203465169
 MonoBehaviour:
   m_ObjectHideFlags: 0
