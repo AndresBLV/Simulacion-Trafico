@@ -32,6 +32,7 @@
             { "Spawn_Road3_Node16", "Destino_Road3_Node28" },
             { "Spawn_Road3_Node17", "Destino_Road3_Node28" },
             { "Spawn_Road3_Node18", "Destino_Road3_Node28" },
+            { "Spawn_Road8_Node5",  "Destino_Road8_Node11" },
             { "Spawn_Road8_Node7",  "Destino_Road8_Node11" },
             { "Spawn_Road8_Node13", "Destino_Road8_Node16" },
             { "Spawn_Road10_Node3", "Destino_Road10_Node8" },
@@ -55,7 +56,7 @@
             { "Inter3", "Acceso Distribuidor Metropolitano (Autopista)" },
 
             // ===== SPAWN OFICIALES =====
-            { "Node4(Road8)", "Spawn_Road8_Node4" },
+            { "Node5(Road8)", "Spawn_Road8_Node5" },
             { "Node7(Road8)", "Spawn_Road8_Node7" },
             { "Node13(Road8)", "Spawn_Road8_Node13" },
             { "Node1(Road1)", "Spawn_Road1_Node1" },

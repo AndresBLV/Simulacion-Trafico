@@ -3023,7 +3023,7 @@ MonoBehaviour:
   isEditorCameraRotated: 0
   isEditorConstructing: 0
   editorConstructionID: 0
-  isEditorSelected: 0
+  isEditorSelected: 1
   isEditorMouseHittingTerrain: 0
   editorMousePos: {x: 1340.972, y: 62.065376, z: 654.5128}
   defaultNodeColor: {r: 0, g: 1, b: 1, a: 0.75}
@@ -207502,6 +207502,18 @@ MonoBehaviour:
       type: 3}
   - spawnSpecialName: Spawn_Road5_Node1
     prefab: {fileID: 6645616114513181105, guid: 62010132604e8c94d96b4cb4fe6d3394,
+      type: 3}
+  - spawnSpecialName: Spawn_Road3_Node15
+    prefab: {fileID: 6645616114513181105, guid: 62010132604e8c94d96b4cb4fe6d3394,
+      type: 3}
+  - spawnSpecialName: Spawn_Road3_Node16
+    prefab: {fileID: 3311311803080157842, guid: 133308cdb8794744caaef026bde9e1f0,
+      type: 3}
+  - spawnSpecialName: Spawn_Road3_Node17
+    prefab: {fileID: 3294564219125457607, guid: 8a8f57edf3523624eb9f886833e8e97a,
+      type: 3}
+  - spawnSpecialName: Spawn_Road3_Node18
+    prefab: {fileID: 7720726507797323357, guid: e9be6b9d71ce20345b55b654f6eca5d9,
       type: 3}
   bottleneckHardStopDist: 16
   bottleneckSlowDist: 30
