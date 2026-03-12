@@ -11,12 +11,42 @@
         public GameObject nodeIndicatorPrefab;
         public bool buildOnAwake = true;    
         public bool graphReady = false;
+
+        [Header("Construcción del Grafo")]
+        [Tooltip("Capa de la geometría de carretera para el raycast de subdivisión. Si es 'Nothing', se usa interpolación directa.")]
+        public LayerMask roadLayerMask = 0;
+        [Tooltip("Radio máximo (XZ) para conectar nodos de carretera a intersecciones")]
+        public float intersectionConnectionRadius = 10f;
+        [Tooltip("Diferencia vertical máxima permitida para conectar un nodo a una intersección (evita unir niveles distintos)")]
+        public float maxVerticalConnectionDiff = 3f;
+        [Tooltip("Roads que se excluyen completamente del grafo (ej: Road13 si tiene nodos fuera de la pista)")]
+        public List<string> excludedRoads = new List<string>();
+        [Tooltip("Roads que se excluyen solo de la subdivisión de aristas (permanecen en el grafo pero sin SubNodes intermedios)")]
+        public List<string> excludedRoadsFromSubdivision = new List<string>();
+        [Tooltip("Nodos específicos a excluir del grafo. Formato: 'RoadName/NodeName'  ej: 'Road13/Node0'")]
+        public List<string> excludedSpecificNodes = new List<string>();
+        [Tooltip("Activa en Play Mode para ver todos los roadNames exactos en la consola")]
+        public bool debugPrintRoadNames = false;
+
+        [Tooltip("Conexiones manuales forzadas para cuando la detección automática falla")]
+        public List<ManualIntersectionConnection> manualConnections = new List<ManualIntersectionConnection>();
+
+        [System.Serializable]
+        public class ManualIntersectionConnection
+        {
+            [Tooltip("Nombre del road, ej: Road13")]
+            public string roadName;
+            [Tooltip("Nombre original del nodo del road, ej: Node2")]
+            public string nodeName;
+            [Tooltip("Nombre de la intersección, ej: Inter21")]
+            public string intersectionName;
+        }
         
         private List<GameObject> visualIndicators = new List<GameObject>();
         
 
         private Dictionary<string, string> spawnToDestinoMapping = new Dictionary<string, string>
-        {
+        {   
             { "Spawn_Road2_Node1",  "Destino_Road2_Node10" },
             { "Spawn_Road1_Node1",  "Destino_Road1_Node29" },
             { "Spawn_Road1_Node3",  "Destino_Road1_Node29" },
@@ -309,6 +339,13 @@
             {
                 if (!road.name.StartsWith("Road")) continue;
 
+                // Saltar roads excluidas por el usuario
+                if (excludedRoads.Contains(road.name))
+                {
+                    Debug.Log($"[GraphBuilder] Road excluida del grafo: {road.name}");
+                    continue;
+                }
+
                 Transform spline = road.Find("Spline");
                 if (spline == null) continue;
 
@@ -328,6 +365,14 @@
 
                 foreach (Transform node in splineNodes)
                 {
+                    // Saltar nodos específicos excluidos (formato "RoadName/NodeName")
+                    string nodeKey = $"{road.name}/{node.name}";
+                    if (excludedSpecificNodes.Contains(nodeKey))
+                    {
+                        Debug.Log($"[GraphBuilder] Nodo excluido: {nodeKey}");
+                        continue;
+                    }
+
                     Vector3Int roundedPos = RoundPosition(node.position, 0.5f);
 
                     if (!positionToNode.TryGetValue(roundedPos, out GraphNode graphNode))
@@ -373,6 +418,14 @@
 
             roadGraph.RebuildAllConnections();
 
+            // Conectar intersecciones que quedaron sin conexión a alguna carretera cercana
+            EnsureIntersectionsConnected();
+
+            // Aplicar conexiones manuales forzadas configuradas en el Inspector
+            ApplyManualConnections();
+
+            roadGraph.RebuildAllConnections();
+
             graphReady = true;
 
             DebugGraphInfo();
@@ -380,6 +433,20 @@
             AssignDestinosToSpawns();
 
             Debug.Log($"Grafo construido. Nodos: {roadGraph.nodes.Count}, Aristas: {roadGraph.edges.Count}");
+
+            if (debugPrintRoadNames)
+            {
+                var groups = roadGraph.nodes.GroupBy(n => n.roadName).OrderBy(g => g.Key);
+                Debug.Log("=== ROADNAMES EN EL GRAFO ===");
+                foreach (var g in groups)
+                {
+                    var originals = g.Where(n => !n.originalName.StartsWith("SubNode_")).ToList();
+                    var subNodes  = g.Where(n =>  n.originalName.StartsWith("SubNode_")).ToList();
+                    string ejemplos = string.Join(", ", originals.Select(n => n.originalName).Take(5));
+                    Debug.Log($"  roadName='{g.Key}'  originales={originals.Count}  SubNodes={subNodes.Count}  ej: [{ejemplos}]");
+                }
+                Debug.Log("=== FIN ROADNAMES ===");
+            }
         }
 
         public void AssignDestinosToSpawns()
@@ -412,20 +479,116 @@
 
         void ConnectIfCloseToIntersection(GraphNode roadNode, List<GraphNode> intersections)
         {
-            float connectionThreshold = 5f; // ajusta si es necesario
-
             foreach (var inter in intersections)
             {
-                float dist = Vector3.Distance(roadNode.position, inter.position);
+                // Filtrar por diferencia vertical: no conectar nodos en niveles distintos
+                float verticalDiff = Mathf.Abs(roadNode.position.y - inter.position.y);
+                if (verticalDiff > maxVerticalConnectionDiff) continue;
 
-                if (dist <= connectionThreshold)
+                float dist = Vector3.Distance(roadNode.position, inter.position);
+                if (dist <= intersectionConnectionRadius)
                 {
                     roadGraph.ConnectNodes(roadNode, inter, dist);
                     roadGraph.ConnectNodes(inter, roadNode, dist);
                 }
             }
         }
-            
+
+        // Paso post-construcción: para cada intersección sin conexiones a alguna carretera,
+        // conecta el nodo de carretera más cercano dentro del radio.
+        // Usa distancia XZ (horizontal) para el radio de búsqueda, permitiendo nodos
+        // ligeramente elevados (ej: Node0 de un road cuyo spline empieza un poco arriba).
+        // El filtro vertical solo se aplica cuando la diferencia es muy grande (paso elevado real).
+        void EnsureIntersectionsConnected()
+        {
+            var allRoadNodes = roadGraph.nodes
+                .Where(n => n.roadName != "Intersection" && !n.originalName.StartsWith("SubNode_"))
+                .ToList();
+
+            var intersectionNodes = roadGraph.nodes
+                .Where(n => n.isIntersection)
+                .ToList();
+
+            float searchRadius = intersectionConnectionRadius * 2f;
+            // Para el paso de corrección se permite hasta el doble de la diferencia vertical,
+            // para no bloquear roads cuyos nodos están ligeramente sobre la superficie.
+            float verticalLimit = maxVerticalConnectionDiff * 2f;
+
+            int extraConnections = 0;
+            foreach (var inter in intersectionNodes)
+            {
+                // Recopilar qué roads ya están conectadas a esta intersección
+                var connectedRoads = new HashSet<string>(
+                    inter.edges.Select(e => e.endNode?.roadName).Where(r => r != null));
+
+                // Buscar candidatos usando distancia horizontal (XZ) para el radio
+                var candidates = new List<(GraphNode node, float dist)>();
+                foreach (var n in allRoadNodes)
+                {
+                    if (connectedRoads.Contains(n.roadName)) continue;
+                    float vertDiff = Mathf.Abs(n.position.y - inter.position.y);
+                    if (vertDiff > verticalLimit) continue;                    // paso elevado real → ignorar
+                    Vector2 interXZ = new Vector2(inter.position.x, inter.position.z);
+                    Vector2 nodeXZ  = new Vector2(n.position.x,     n.position.z);
+                    float horizDist = Vector2.Distance(interXZ, nodeXZ);
+                    if (horizDist <= searchRadius)
+                        candidates.Add((n, Vector3.Distance(n.position, inter.position)));
+                }
+
+                candidates.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+                // Conectar el nodo más cercano de cada road no conectada
+                var roadsAdded = new HashSet<string>();
+                foreach (var (node, dist) in candidates)
+                {
+                    if (roadsAdded.Contains(node.roadName)) continue;
+                    roadGraph.ConnectNodes(node, inter, dist);
+                    roadGraph.ConnectNodes(inter, node, dist);
+                    roadsAdded.Add(node.roadName);
+                    extraConnections++;
+                    Debug.Log($"[IntersectionFix] {inter.originalName} ↔ {node.originalName}({node.roadName}) dist={dist:F1}");
+                }
+            }
+
+            if (extraConnections > 0)
+                Debug.Log($"[IntersectionFix] {extraConnections} conexiones adicionales creadas.");
+        }
+
+        // Aplica las conexiones manuales definidas en el Inspector
+        void ApplyManualConnections()
+        {
+            if (manualConnections == null || manualConnections.Count == 0) return;
+
+            foreach (var mc in manualConnections)
+            {
+                // Buscar el nodo del road
+                var roadNode = roadGraph.nodes.FirstOrDefault(n =>
+                    n.roadName == mc.roadName &&
+                    (n.originalName == mc.nodeName || n.originalName == $"{mc.nodeName}({mc.roadName})"));
+
+                // Buscar la intersección
+                var interNode = roadGraph.nodes.FirstOrDefault(n =>
+                    n.isIntersection &&
+                    (n.originalName == mc.intersectionName || n.specialName == mc.intersectionName));
+
+                if (roadNode == null)
+                {
+                    Debug.LogWarning($"[ManualConnection] No se encontró nodo '{mc.nodeName}' en road '{mc.roadName}'");
+                    continue;
+                }
+                if (interNode == null)
+                {
+                    Debug.LogWarning($"[ManualConnection] No se encontró intersección '{mc.intersectionName}'");
+                    continue;
+                }
+
+                float dist = Vector3.Distance(roadNode.position, interNode.position);
+                roadGraph.ConnectNodes(roadNode, interNode, dist);
+                roadGraph.ConnectNodes(interNode, roadNode, dist);
+                Debug.Log($"[ManualConnection] ✓ {mc.nodeName}({mc.roadName}) ↔ {mc.intersectionName} dist={dist:F1}m");
+            }
+        }
+
         // Método para mostrar información de nodos especiales
         void ShowSpecialNodesInfo()
         {
@@ -511,10 +674,24 @@
             {
                 if (edge.startNode == null || edge.endNode == null) continue;
 
+                // Saltar aristas donde cualquiera de los dos extremos pertenece a una road excluida
+                string startRoad = edge.startNode.roadName;
+                string endRoad   = edge.endNode.roadName;
+
+                bool startExcluded = excludedRoads.Contains(startRoad) || excludedRoadsFromSubdivision.Contains(startRoad);
+                bool endExcluded   = excludedRoads.Contains(endRoad)   || excludedRoadsFromSubdivision.Contains(endRoad);
+                if (startExcluded || endExcluded)
+                {
+                    Debug.Log($"[Subdivision] Saltando arista excluida: {edge.startNode.originalName}({startRoad}) → {edge.endNode.originalName}({endRoad})");
+                    continue;
+                }
+
                 float distance = Vector3.Distance(edge.startNode.position, edge.endNode.position);
                 if (distance > maxSegmentLength)
                     edgesToSplit.Add((edge.startNode, edge.endNode));
             }
+
+            Debug.Log($"[Subdivision] Aristas a subdividir: {edgesToSplit.Count}  |  Roads excluidas subdivision: [{string.Join(", ", excludedRoadsFromSubdivision)}]");
 
             // 2️⃣ Subdividir cada arista
             foreach (var (start, end) in edgesToSplit)
@@ -532,14 +709,17 @@
                 {
                     float t = (float)i / segments;
 
-                    // Interpolación lineal
+                    // Interpolación lineal entre los dos nodos de carretera
                     Vector3 newPos = Vector3.Lerp(start.position, end.position, t);
 
-                    // 🔹 Ajustar nodo sobre la carretera usando raycast hacia abajo
-                    RaycastHit hit;
-                    if (Physics.Raycast(newPos + Vector3.up * 10f, Vector3.down, out hit, 20f))
+                    // Ajustar altura solo si hay una capa de carretera configurada
+                    // Si roadLayerMask == 0 se usa la interpolación directa (evita que el
+                    // raycast golpee terreno y coloque nodos fuera de la pista)
+                    if (roadLayerMask != 0)
                     {
-                        newPos = hit.point + Vector3.up * 0.1f; // pequeño offset para evitar colisiones
+                        RaycastHit hit;
+                        if (Physics.Raycast(newPos + Vector3.up * 10f, Vector3.down, out hit, 20f, roadLayerMask))
+                            newPos = hit.point + Vector3.up * 0.1f;
                     }
 
                     GraphNode newNode = roadGraph.AddNode(newPos, $"SubNode_{start.id}_{end.id}_{i}", start.roadName);
@@ -701,5 +881,35 @@
         public void ShowSpecialNodes()
         {
             ShowSpecialNodesInfo();
+        }
+
+        [ContextMenu("Debug: Listar RoadNames del Grafo")]
+        public void DebugRoadNames()
+        {
+            var groups = roadGraph.nodes
+                .GroupBy(n => n.roadName)
+                .OrderBy(g => g.Key);
+
+            Debug.Log("=== ROADNAMES EN EL GRAFO ===");
+            foreach (var g in groups)
+                Debug.Log($"  roadName='{g.Key}'  ({g.Count()} nodos)  ej: {g.First().originalName}");
+            Debug.Log("=== FIN ===");
+        }
+
+        [ContextMenu("Debug: Conexiones de Intersecciones")]
+        public void DebugIntersectionConnections()
+        {
+            var intersections = roadGraph.nodes.Where(n => n.isIntersection).ToList();
+            Debug.Log($"=== CONEXIONES DE INTERSECCIONES ({intersections.Count}) ===");
+            foreach (var inter in intersections)
+            {
+                var connectedRoads = inter.edges
+                    .Where(e => e.endNode != null)
+                    .Select(e => $"{e.endNode.originalName}({e.endNode.roadName})")
+                    .Distinct()
+                    .ToList();
+                Debug.Log($"{inter.originalName} @ Y={inter.position.y:F1} → [{string.Join(", ", connectedRoads)}]");
+            }
+            Debug.Log("=== FIN ===");
         }
     }
