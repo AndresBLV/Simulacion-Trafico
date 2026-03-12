@@ -368,7 +368,7 @@ public class NPCAgent : MonoBehaviour
             }
         }
 
-        // Parar si hay otro vehículo directamente adelante (seguimiento de cola)
+        // Frenar si hay un vehículo directamente adelante (seguimiento de cola)
         Collider[] nearby = Physics.OverlapSphere(
             transform.position + transform.forward * (vehicleFollowDistance * 0.5f), 2.5f);
         foreach (var col in nearby)

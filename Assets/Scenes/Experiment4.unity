@@ -207445,8 +207445,8 @@ MonoBehaviour:
   roadGraphSystem: {fileID: 1203465169}
   npcVehiclePrefab: {fileID: 3475842691593141834, guid: 9ea2b1499a734504480e2a94d1002ada,
     type: 3}
-  maxNPCVehicles: 454
-  spawnInterval: 0.5
+  maxNPCVehicles: 1000
+  spawnInterval: 0.2
   minNPCSpeed: 10
   maxNPCSpeed: 35
   trafficUpdateInterval: 2
@@ -207468,14 +207468,14 @@ MonoBehaviour:
     roadName: Road3
     nodeName: Node26
     interval: 180
-    duration: 45
+    duration: 35
     isActive: 0
     activeNodes: []
   - enabled: 1
     roadName: Road8
     nodeName: Node11
     interval: 180
-    duration: 45
+    duration: 25
     isActive: 0
     activeNodes: []
   spawnPrefabMappings:

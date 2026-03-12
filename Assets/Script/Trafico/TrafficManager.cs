@@ -725,6 +725,7 @@ public class TrafficManager : MonoBehaviour
     public float bottleneckSlowDist = 30f;
 
     private Dictionary<NPCAgent, float> throttledNPCs = new Dictionary<NPCAgent, float>();
+    private Vector3 bottleneckWorldPos;
 
     IEnumerator BottleneckRoutine(BottleneckConfig config)
     {
@@ -761,6 +762,7 @@ public class TrafficManager : MonoBehaviour
         config.activeNodes.Add(anchorNode);
         config.isActive = true;
         anchorNode.isBlocked = true;
+        bottleneckWorldPos = anchorNode.position;
 
         Debug.Log($"[Bottleneck] Cola activada: {config.roadName}/{config.nodeName} — {config.duration}s");
 
@@ -832,33 +834,64 @@ public class TrafficManager : MonoBehaviour
 
     void ReleaseBottleneckSpeeds()
     {
+        // Calcular distancia máxima entre los vehículos frenados y el nodo
+        // para normalizar la velocidad inicial de cada uno
+        float maxDist = 1f;
         foreach (var kvp in throttledNPCs)
         {
             if (kvp.Key == null) continue;
-            kvp.Key.speed = kvp.Value;
+            float d = Vector3.Distance(kvp.Key.transform.position, bottleneckWorldPos);
+            if (d > maxDist) maxDist = d;
+        }
+
+        foreach (var kvp in throttledNPCs)
+        {
+            if (kvp.Key == null) continue;
+            float dist = Vector3.Distance(kvp.Key.transform.position, bottleneckWorldPos);
+            // t=0 → frente (más cercano, velocidad completa)
+            // t=1 → fondo de la cola (velocidad reducida al 25%)
+            float t = dist / maxDist;
+            float releaseSpeed = Mathf.Lerp(kvp.Value, kvp.Value * 0.25f, t);
+            kvp.Key.speed = releaseSpeed;
             kvp.Key.isHardStopped = false;
         }
         throttledNPCs.Clear();
 
+        // Vehículos detenidos por cadena reactiva: arrancan despacio
         foreach (var npc in activeNPCs)
         {
             if (npc == null) continue;
             npc.isHardStopped = false;
             npc.ignoreQueueBlock = true;
             if (npc.speed <= 0f)
-                npc.speed = 30f;
+                npc.speed = 8f;
         }
 
-        StartCoroutine(ReenableQueueBlockRoutine(5f));
+        StartCoroutine(RestoreSpeedsGradually(6f));
     }
 
-    IEnumerator ReenableQueueBlockRoutine(float delay)
+    IEnumerator RestoreSpeedsGradually(float duration)
     {
-        yield return new WaitForSeconds(delay);
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            foreach (var npc in activeNPCs)
+            {
+                if (npc == null || npc.speed <= 0f) continue;
+                // Subir velocidad progresivamente hasta 30
+                if (npc.speed < 30f)
+                    npc.speed = Mathf.MoveTowards(npc.speed, 30f, 30f * Time.deltaTime / duration * 2f);
+            }
+            yield return null;
+        }
+
+        // Asegurar velocidad completa y reactivar detección de cola
         foreach (var npc in activeNPCs)
         {
-            if (npc != null)
-                npc.ignoreQueueBlock = false;
+            if (npc == null) continue;
+            npc.speed = 30f;
+            npc.ignoreQueueBlock = false;
         }
     }
 
