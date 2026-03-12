@@ -205391,6 +205391,9 @@ MonoBehaviour:
   - Road6/Node16
   - Road7/Node0
   - Road8/Node18
+  - Road10/Node0
+  - Road3/Node0
+  - Road11/Node0
   debugPrintRoadNames: 0
   manualConnections:
   - roadName: Road13
