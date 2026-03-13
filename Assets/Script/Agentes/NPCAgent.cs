@@ -9,6 +9,7 @@ public class NPCAgent : MonoBehaviour
     public RoadGraphSystem roadGraphSystem;
     public GraphNode startNode;
     public GraphNode targetNode;
+    [HideInInspector] public GraphNode viaNode = null;  // nodo intermedio obligatorio (opcional)
     public float speed = 10f;
     public float rotationSpeed = 2f;
     public float minDistanceToNode = 2f;
@@ -242,10 +243,35 @@ public class NPCAgent : MonoBehaviour
         }
         
         currentNode = roadGraphSystem.roadGraph.GetNodeById(currentNode.id);
-        targetNode = roadGraphSystem.roadGraph.GetNodeById(targetNode.id);
-        currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
+        targetNode  = roadGraphSystem.roadGraph.GetNodeById(targetNode.id);
+
+        if (viaNode != null)
+        {
+            // Ruta en dos segmentos: spawn → via → destino
+            var viaResolved = roadGraphSystem.roadGraph.GetNodeById(viaNode.id);
+            var seg1 = roadGraphSystem.roadGraph.FindPath(currentNode, viaResolved);
+            var seg2 = roadGraphSystem.roadGraph.FindPath(viaResolved, targetNode);
+
+            if (seg1 != null && seg1.Count > 0 && seg2 != null && seg2.Count > 0)
+            {
+                // Concatenar eliminando el via-nodo duplicado entre segmentos
+                currentPath = new List<GraphNode>(seg1);
+                currentPath.AddRange(seg2);
+                Debug.Log($"NPCAgent {gameObject.name} - Ruta via '{viaNode.originalName}': {currentPath.Count} nodos");
+            }
+            else
+            {
+                Debug.LogWarning($"NPCAgent {gameObject.name}: No se encontró ruta via '{viaNode.originalName}'. Intentando ruta directa.");
+                currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
+            }
+        }
+        else
+        {
+            currentPath = roadGraphSystem.roadGraph.FindPath(currentNode, targetNode);
+        }
+
         currentPathIndex = 0;
-        
+
         if (currentPath != null && currentPath.Count > 0)
         {
             Debug.Log($"NPCAgent {gameObject.name} - Ruta calculada: {currentPath.Count} nodos");
@@ -255,8 +281,6 @@ public class NPCAgent : MonoBehaviour
         else
         {
             Debug.LogWarning($"NPCAgent {gameObject.name}: No se encontró ruta de {currentNode?.name} a {targetNode?.name}");
-            
-            // Intentar con un nodo diferente
             Invoke("FindNewDestination", 1f);
         }
     }

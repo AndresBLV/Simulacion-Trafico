@@ -485,6 +485,8 @@ public class TrafficManager : MonoBehaviour
             npcAgent.roadGraphSystem = roadGraphSystem;
             npcAgent.startNode = spawnNode;
             npcAgent.targetNode = targetNode;
+            // Asignar via-node si está configurado para este spawn (distribución por probabilidad)
+            npcAgent.viaNode = roadGraphSystem.GetViaNode(spawnNode.specialName);
             float fixedSpeed = 30f; // velocidad fija para todos los NPCs
             npcAgent.speed = fixedSpeed;
             npcAgent.showPath = true;

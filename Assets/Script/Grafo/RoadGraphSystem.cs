@@ -25,6 +25,52 @@
         public List<string> excludedRoadsFromSubdivision = new List<string>();
         [Tooltip("Nodos específicos a excluir del grafo. Formato: 'RoadName/NodeName'  ej: 'Road13/Node0'")]
         public List<string> excludedSpecificNodes = new List<string>();
+        [Tooltip("Multiplicadores de costo por road. Valores < 1 hacen que A* prefiera esa ruta (ej: 0.3 = muy preferida). Valores > 1 la evitan.")]
+        public List<RoadCostMultiplier> roadCostMultipliers = new List<RoadCostMultiplier>();
+
+        [Tooltip("Nodos de paso obligatorio para spawns específicos. Los vehículos se distribuyen entre la ruta normal y la ruta vía el nodo intermedio.")]
+        public List<ViaNodeConfig> viaNodeConfigs = new List<ViaNodeConfig>();
+
+        [System.Serializable]
+        public class ViaNodeConfig
+        {
+            [Tooltip("Nombre especial del spawn, ej: Spawn_Road3_Node14")]
+            public string spawnSpecialName;
+            [Tooltip("Nombre especial del nodo intermedio obligatorio, ej: Destino_Road13_Node6")]
+            public string viaNodeSpecialName;
+            [Tooltip("Probabilidad de que este vehículo tome la ruta con via-nodo (0=nunca, 1=siempre, 0.5=mitad)")]
+            [Range(0f, 1f)]
+            public float chance = 0.5f;
+        }
+
+        // Devuelve el via-node para un spawn dado, o null si no aplica (por probabilidad o configuración)
+        public GraphNode GetViaNode(string spawnSpecialName)
+        {
+            if (viaNodeConfigs == null) return null;
+            foreach (var cfg in viaNodeConfigs)
+            {
+                if (cfg.spawnSpecialName != spawnSpecialName) continue;
+                if (Random.value > cfg.chance) return null;   // no le tocó esta vez
+                // Buscar el nodo en el grafo por specialName o originalName
+                var via = roadGraph.nodes.FirstOrDefault(n =>
+                    n.specialName == cfg.viaNodeSpecialName ||
+                    n.originalName == cfg.viaNodeSpecialName);
+                if (via == null)
+                    Debug.LogWarning($"[ViaNode] No se encontró el nodo '{cfg.viaNodeSpecialName}' en el grafo.");
+                return via;
+            }
+            return null;
+        }
+
+        [System.Serializable]
+        public class RoadCostMultiplier
+        {
+            [Tooltip("Nombre del road, ej: Road13")]
+            public string roadName;
+            [Tooltip("Multiplicador de costo. 0.3 = A* prefiere esta ruta. 2.0 = A* la evita.")]
+            [Range(0.05f, 5f)]
+            public float costMultiplier = 0.3f;
+        }
         [Tooltip("Activa en Play Mode para ver todos los roadNames exactos en la consola")]
         public bool debugPrintRoadNames = false;
 
@@ -130,6 +176,7 @@
             { "Node10(Road11)", "Destino_Road11_Node10" },
             { "Node14(Road6)", "Destino_Road6_Node14" },
             { "Node4(Road7)", "Destino_Road7_Node4" },
+            { "Node6(Road13)", "Destino_Road13_Node6" },
             { "Node28(Road3)", "Destino_Road3_Node28" }
             
         };
@@ -396,9 +443,10 @@
                     if (previousNode != null)
                     {
                         float dist = Vector3.Distance(previousNode.position, graphNode.position);
+                        float cost = dist * GetRoadCostMultiplier(road.name);
 
-                        roadGraph.ConnectNodes(previousNode, graphNode, dist);
-                        roadGraph.ConnectNodes(graphNode, previousNode, dist);
+                        roadGraph.ConnectNodes(previousNode, graphNode, cost);
+                        roadGraph.ConnectNodes(graphNode, previousNode, cost);
                     }
 
                     previousNode = graphNode;
@@ -488,8 +536,9 @@
                 float dist = Vector3.Distance(roadNode.position, inter.position);
                 if (dist <= intersectionConnectionRadius)
                 {
-                    roadGraph.ConnectNodes(roadNode, inter, dist);
-                    roadGraph.ConnectNodes(inter, roadNode, dist);
+                    float cost = dist * GetRoadCostMultiplier(roadNode.roadName);
+                    roadGraph.ConnectNodes(roadNode, inter, cost);
+                    roadGraph.ConnectNodes(inter, roadNode, cost);
                 }
             }
         }
@@ -590,6 +639,14 @@
         }
 
         // Método para mostrar información de nodos especiales
+        float GetRoadCostMultiplier(string roadName)
+        {
+            if (roadCostMultipliers == null) return 1f;
+            foreach (var entry in roadCostMultipliers)
+                if (entry.roadName == roadName) return entry.costMultiplier;
+            return 1f;
+        }
+
         void ShowSpecialNodesInfo()
         {
             int specialNodesCount = 0;
