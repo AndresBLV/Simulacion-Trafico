@@ -36,31 +36,41 @@
         {
             [Tooltip("Nombre especial del spawn, ej: Spawn_Road3_Node14")]
             public string spawnSpecialName;
-            [Tooltip("Nombre especial del nodo intermedio obligatorio, ej: Destino_Road13_Node6")]
+            [Tooltip("Nombre especial del nodo intermedio (o destino final si endAtViaNode=true)")]
             public string viaNodeSpecialName;
-            [Tooltip("Probabilidad de que este vehículo tome la ruta con via-nodo (0=nunca, 1=siempre, 0.5=mitad)")]
+            [Tooltip("Probabilidad de que este vehículo tome esta ruta (0=nunca, 1=siempre, 0.5=mitad)")]
             [Range(0f, 1f)]
             public float chance = 0.5f;
+            [Tooltip("Si está activo, el vehículo termina su recorrido en el via-node (no continúa al destino original)")]
+            public bool endAtViaNode = false;
         }
 
-        // Devuelve el via-node para un spawn dado, o null si no aplica (por probabilidad o configuración)
-        public GraphNode GetViaNode(string spawnSpecialName)
+        public struct ViaNodeResult
         {
-            if (viaNodeConfigs == null) return null;
+            public GraphNode node;
+            public bool endAtVia;
+        }
+
+        // Devuelve info del via-node para un spawn, o node=null si no aplica
+        public ViaNodeResult GetViaNodeInfo(string spawnSpecialName)
+        {
+            if (viaNodeConfigs == null) return default;
             foreach (var cfg in viaNodeConfigs)
             {
                 if (cfg.spawnSpecialName != spawnSpecialName) continue;
-                if (Random.value > cfg.chance) return null;   // no le tocó esta vez
-                // Buscar el nodo en el grafo por specialName o originalName
+                if (Random.value > cfg.chance) return default;   // no le tocó esta vez
                 var via = roadGraph.nodes.FirstOrDefault(n =>
                     n.specialName == cfg.viaNodeSpecialName ||
                     n.originalName == cfg.viaNodeSpecialName);
                 if (via == null)
                     Debug.LogWarning($"[ViaNode] No se encontró el nodo '{cfg.viaNodeSpecialName}' en el grafo.");
-                return via;
+                return new ViaNodeResult { node = via, endAtVia = cfg.endAtViaNode };
             }
-            return null;
+            return default;
         }
+
+        // Mantener compatibilidad con llamadas antiguas
+        public GraphNode GetViaNode(string spawnSpecialName) => GetViaNodeInfo(spawnSpecialName).node;
 
         [System.Serializable]
         public class RoadCostMultiplier

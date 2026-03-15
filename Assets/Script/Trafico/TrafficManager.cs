@@ -168,6 +168,11 @@ public class TrafficManager : MonoBehaviour
                 weight = 0.3f;
             }
 
+            if (node.specialName == "Spawn_Road3_Node19")
+            {
+                weight = 0.2f;
+            }
+
             weightedSpawns.Add(new WeightedSpawn
             {
                 node = node,
@@ -484,9 +489,21 @@ public class TrafficManager : MonoBehaviour
             // Configurar NPC
             npcAgent.roadGraphSystem = roadGraphSystem;
             npcAgent.startNode = spawnNode;
-            npcAgent.targetNode = targetNode;
-            // Asignar via-node si está configurado para este spawn (distribución por probabilidad)
-            npcAgent.viaNode = roadGraphSystem.GetViaNode(spawnNode.specialName);
+
+            // Consultar via-node para este spawn
+            var viaInfo = roadGraphSystem.GetViaNodeInfo(spawnNode.specialName);
+            if (viaInfo.node != null && viaInfo.endAtVia)
+            {
+                // El via-node ES el destino final: ruta directa, sin continuar al destino original
+                npcAgent.targetNode = viaInfo.node;
+                npcAgent.viaNode    = null;
+            }
+            else
+            {
+                // Via-node como waypoint intermedio (o sin via-node)
+                npcAgent.targetNode = targetNode;
+                npcAgent.viaNode    = viaInfo.node;
+            }
             float fixedSpeed = 30f; // velocidad fija para todos los NPCs
             npcAgent.speed = fixedSpeed;
             npcAgent.showPath = true;
