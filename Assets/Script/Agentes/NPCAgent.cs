@@ -9,7 +9,8 @@ public class NPCAgent : MonoBehaviour
     public RoadGraphSystem roadGraphSystem;
     public GraphNode startNode;
     public GraphNode targetNode;
-    [HideInInspector] public GraphNode viaNode = null;  // nodo intermedio obligatorio (opcional)
+    [HideInInspector] public GraphNode viaNode = null;              // nodo intermedio obligatorio (opcional)
+    [HideInInspector] public GraphNode assignedFinalDestination;    // destino fijo asignado al spawn, nunca se sobreescribe por rutas aleatorias
     public float speed = 10f;
     public float rotationSpeed = 2f;
     public float minDistanceToNode = 2f;
@@ -138,9 +139,22 @@ public class NPCAgent : MonoBehaviour
             return;
         }
         
-        // Si no hay ruta actual, buscar nueva
+        // Si no hay ruta actual, verificar primero si ya llegó al destino final
         if (currentPath == null || currentPathIndex >= currentPath.Count)
         {
+            // Si está en el destino asignado (o muy cerca), dejar que el tracker lo despawnee
+            if (assignedFinalDestination != null &&
+                Vector3.Distance(transform.position, assignedFinalDestination.position) < 5f)
+            {
+                // Ya llegó — detener el vehículo y esperar el despawn del TrafficManager
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                return;
+            }
+
             Debug.LogWarning($"NPCAgent {gameObject.name} - Sin ruta válida. Buscando nuevo destino...");
             FindNewDestination();
             return;
@@ -203,7 +217,12 @@ public class NPCAgent : MonoBehaviour
 
         currentNode = currentPath[currentPathIndex];
         Debug.Log($"{gameObject.name} llegó a {currentNode.name}");
-        
+
+        // Si el vehículo llega al via-node, limpiar la referencia para que
+        // futuros recálculos de ruta no vuelvan a pasar por él
+        if (viaNode != null && currentNode.id == viaNode.id)
+            viaNode = null;
+
         // Avanzar índice
         currentPathIndex++;
         
@@ -292,6 +311,26 @@ public class NPCAgent : MonoBehaviour
             roadGraphSystem.roadGraph.nodes.Count < 2)
         {
             return;
+        }
+
+        // Si el NPC tiene un destino fijo asignado, nunca usar uno aleatorio
+        if (assignedFinalDestination != null)
+        {
+            var fixed_resolved = roadGraphSystem.roadGraph.GetNodeById(assignedFinalDestination.id);
+            if (fixed_resolved == null) { /* nodo inválido, dejar caer a lógica aleatoria */ }
+            else if (fixed_resolved == currentNode ||
+                     Vector3.Distance(transform.position, fixed_resolved.position) < 5f)
+            {
+                // Ya está en el destino — detener y esperar despawn
+                if (rb != null) { rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+                return;
+            }
+            else
+            {
+                targetNode = fixed_resolved;
+                CalculatePathToTarget();
+                return;
+            }
         }
 
         GraphNode newTarget = null;

@@ -495,14 +495,16 @@ public class TrafficManager : MonoBehaviour
             if (viaInfo.node != null && viaInfo.endAtVia)
             {
                 // El via-node ES el destino final: ruta directa, sin continuar al destino original
-                npcAgent.targetNode = viaInfo.node;
-                npcAgent.viaNode    = null;
+                npcAgent.targetNode              = viaInfo.node;
+                npcAgent.viaNode                 = null;
+                npcAgent.assignedFinalDestination = viaInfo.node;  // proteger contra rutas aleatorias
             }
             else
             {
                 // Via-node como waypoint intermedio (o sin via-node)
-                npcAgent.targetNode = targetNode;
-                npcAgent.viaNode    = viaInfo.node;
+                npcAgent.targetNode              = targetNode;
+                npcAgent.viaNode                 = viaInfo.node;
+                npcAgent.assignedFinalDestination = targetNode;     // proteger destino original
             }
             float fixedSpeed = 30f; // velocidad fija para todos los NPCs
             npcAgent.speed = fixedSpeed;
@@ -510,8 +512,10 @@ public class TrafficManager : MonoBehaviour
             npcAgent.minDistanceToNode = 1.5f;
             
             // Añadir componente de tracker de destino
+            // Usar el destino real del NPC (puede ser el via-node si endAtViaNode=true)
+            GraphNode trackerTarget = (viaInfo.node != null && viaInfo.endAtVia) ? viaInfo.node : targetNode;
             NPCDestinationTracker tracker = npcObj.AddComponent<NPCDestinationTracker>();
-            tracker.Initialize(this, npcAgent, targetNode, despawnDelay);
+            tracker.Initialize(this, npcAgent, trackerTarget, despawnDelay);
             
             activeNPCs.Add(npcAgent);
             
@@ -819,6 +823,18 @@ public class TrafficManager : MonoBehaviour
         return node;
     }
 
+    // Comprueba si el path del NPC pasa por un punto cercano a blockPos
+    bool NpcPathPassesNearBlock(NPCAgent npc, Vector3 blockPos, float radius)
+    {
+        if (npc.currentPath == null) return false;
+        for (int i = npc.currentPathIndex; i < npc.currentPath.Count; i++)
+        {
+            if (Vector3.Distance(npc.currentPath[i].position, blockPos) <= radius)
+                return true;
+        }
+        return false;
+    }
+
     void ApplyBottleneckSpeeds(Vector3 blockPos)
     {
         foreach (var npc in activeNPCs)
@@ -832,6 +848,10 @@ public class TrafficManager : MonoBehaviour
 
             float dot = Vector3.Dot(npc.transform.forward, toBlock.normalized);
             if (dot < 0.5f) continue;
+
+            // Solo afectar NPCs cuyo path realmente pase por el nodo de bottleneck
+            // Esto evita que vehículos en roads cercanas sean frenados por error
+            if (!NpcPathPassesNearBlock(npc, blockPos, bottleneckSlowDist * 0.6f)) continue;
 
             if (!throttledNPCs.ContainsKey(npc))
                 throttledNPCs[npc] = npc.speed > 0f ? npc.speed : 30f;
